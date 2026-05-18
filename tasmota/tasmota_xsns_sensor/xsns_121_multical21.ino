@@ -783,10 +783,26 @@ static void M21Show(bool json) {
   if (json && !M21->have_data) { return; }
 
   if (json) {
-    ResponseAppend_P(PSTR(",\"" M21_LABEL "\":{\"Total\":%3_f,\"Target\":%3_f,"
-                         "\"Flow\":%d,\"Ambient\":%d,\"Rssi\":%d}"),
+    // JSON-Layout fuer Home-Assistant-Tasmota-Discovery (hatasmota):
+    //   - Volumen unter "Multical21" als "Volume" / "VolumeTarget".
+    //     hatasmota kennt diese Schluessel nicht -> Entitaeten ohne Auto-
+    //     Einheit. In HA einmalig per "customize" oder Template auf m^3,
+    //     device_class: water, state_class: total_increasing setzen.
+    //   - Temperaturen als eigene Sub-Devices "Multical21Flow" und
+    //     "Multical21Ambient" mit Standard-Schluessel "Temperature".
+    //     Damit liefert HA automatisch °C und device_class: temperature.
+    //   - "Total" wird bewusst vermieden, weil hatasmota dies sonst als
+    //     Energie (kWh) klassifiziert.
+    ResponseAppend_P(PSTR(",\"" M21_LABEL "\":{"
+                         "\"Volume\":%3_f,"
+                         "\"VolumeTarget\":%3_f,"
+                         "\"Rssi\":%d"
+                         "},"
+                         "\"" M21_LABEL "Flow\":{\"Temperature\":%d},"
+                         "\"" M21_LABEL "Ambient\":{\"Temperature\":%d}"),
                     &M21->total_m3, &M21->target_m3,
-                    M21->flow_temp_c, M21->ambient_temp_c, M21->last_rssi_dbm);
+                    M21->last_rssi_dbm,
+                    M21->flow_temp_c, M21->ambient_temp_c);
 #ifdef USE_WEBSERVER
   } else {
     // Web UI: always show, even before first frame, so the user sees the
@@ -794,11 +810,11 @@ static void M21Show(bool json) {
     if (M21->have_data) {
       WSContentSend_PD(PSTR("{s}" M21_LABEL " " D_VOLUME "{m}%3_f " D_UNIT_CUBIC_METER "{e}"),
                       &M21->total_m3);
-      WSContentSend_PD(PSTR("{s}" M21_LABEL " Target{m}%3_f " D_UNIT_CUBIC_METER "{e}"),
+      WSContentSend_PD(PSTR("{s}" M21_LABEL " Volume Target{m}%3_f " D_UNIT_CUBIC_METER "{e}"),
                       &M21->target_m3);
-      WSContentSend_PD(PSTR("{s}" M21_LABEL " Flow{m}%d " D_UNIT_DEGREE D_UNIT_CELSIUS "{e}"),
+      WSContentSend_PD(PSTR("{s}" M21_LABEL " Flow Temp{m}%d " D_UNIT_DEGREE D_UNIT_CELSIUS "{e}"),
                       M21->flow_temp_c);
-      WSContentSend_PD(PSTR("{s}" M21_LABEL " Ambient{m}%d " D_UNIT_DEGREE D_UNIT_CELSIUS "{e}"),
+      WSContentSend_PD(PSTR("{s}" M21_LABEL " Ambient Temp{m}%d " D_UNIT_DEGREE D_UNIT_CELSIUS "{e}"),
                       M21->ambient_temp_c);
       WSContentSend_PD(PSTR("{s}" M21_LABEL " RSSI{m}%d dBm{e}"),
                       M21->last_rssi_dbm);
