@@ -774,7 +774,7 @@ static void M21Poll(void) {
  * Show / publish
 \*-------------------------------------------------------------------------------------------*/
 
-#define M21_LABEL                      "Multical21"
+#define M21_LABEL                      "Water"
 
 static void M21Show(bool json) {
   if (!M21) { return; }
