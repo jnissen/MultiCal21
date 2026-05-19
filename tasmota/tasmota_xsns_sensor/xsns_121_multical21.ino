@@ -211,6 +211,12 @@ typedef struct {
   uint32_t frames_valid;
   uint32_t last_valid_ms;
   uint32_t last_publish_ms;
+
+  // Flow per minute: track total_m3 once per second in a 60-entry ring buffer
+  float    flow_ring[60];        // total_m3 snapshots (one per second)
+  uint8_t  flow_ring_idx;        // next write index (0..59)
+  uint8_t  flow_ring_count;      // entries filled (0..60)
+  float    flow_per_min_l;       // calculated: liters in the last 60 seconds
 } M21State;
 
 static M21State *M21 = nullptr;
@@ -774,48 +780,80 @@ static void M21Poll(void) {
  * Show / publish
 \*-------------------------------------------------------------------------------------------*/
 
-#define M21_LABEL                      "Multical21"
+#define M21_LABEL                      "Meter"
 
 static void M21Show(bool json) {
   if (!M21) { return; }
-  // JSON: only when we already have at least one valid frame (otherwise we
-  // would publish all-zero values via telemetry).
-  if (json && !M21->have_data) { return; }
+  // Immer publizieren, auch ohne empfangenes Paket. Damit:
+  //   - erscheinen die Sensoren sofort auf der Tasmota-Webseite (mit 0-Werten)
+  //   - sendet Tasmota die Home-Assistant-Discovery (tasmota/discovery/.../sensors)
+  //     direkt nach dem Boot, ohne auf den ersten wM-Bus-Frame zu warten.
 
   if (json) {
-    ResponseAppend_P(PSTR(",\"" M21_LABEL "\":{\"Total\":%3_f,\"Target\":%3_f,"
-                         "\"Flow\":%d,\"Ambient\":%d,\"Rssi\":%d}"),
+    // JSON-Layout fuer Home-Assistant-Tasmota-Discovery (hatasmota):
+    //   - Jeder Sensor als eigenes Top-Level-Objekt, damit HA keinen
+    //     gemeinsamen Prefix ("Meter") voranstellt.
+    //   - Temperaturen mit Standard-Schluessel "Temperature" -> °C in HA.
+    //   - "Total" wird bewusst vermieden (waere sonst kWh in hatasmota).
+    ResponseAppend_P(PSTR(",\"Volume\":{\"Value\":%3_f},"
+                         "\"VolumeTarget\":{\"Value\":%3_f},"
+                         "\"FlowPerMin\":{\"Value\":%1_f},"
+                         "\"RSSI\":{\"Value\":%d},"
+                         "\"Flow\":{\"Temperature\":%d},"
+                         "\"Ambient\":{\"Temperature\":%d}"),
                     &M21->total_m3, &M21->target_m3,
-                    M21->flow_temp_c, M21->ambient_temp_c, M21->last_rssi_dbm);
+                    &M21->flow_per_min_l,
+                    M21->last_rssi_dbm,
+                    M21->flow_temp_c, M21->ambient_temp_c);
 #ifdef USE_WEBSERVER
   } else {
-    // Web UI: always show, even before first frame, so the user sees the
-    // sensor on the main page (waiting state).
-    if (M21->have_data) {
-      WSContentSend_PD(PSTR("{s}" M21_LABEL " " D_VOLUME "{m}%3_f " D_UNIT_CUBIC_METER "{e}"),
-                      &M21->total_m3);
-      WSContentSend_PD(PSTR("{s}" M21_LABEL " Target{m}%3_f " D_UNIT_CUBIC_METER "{e}"),
-                      &M21->target_m3);
-      WSContentSend_PD(PSTR("{s}" M21_LABEL " Flow{m}%d " D_UNIT_DEGREE D_UNIT_CELSIUS "{e}"),
-                      M21->flow_temp_c);
-      WSContentSend_PD(PSTR("{s}" M21_LABEL " Ambient{m}%d " D_UNIT_DEGREE D_UNIT_CELSIUS "{e}"),
-                      M21->ambient_temp_c);
-      WSContentSend_PD(PSTR("{s}" M21_LABEL " RSSI{m}%d dBm{e}"),
-                      M21->last_rssi_dbm);
-      WSContentSend_PD(PSTR("{s}" M21_LABEL " Frames{m}%u / %u{e}"),
-                      (unsigned)M21->frames_valid, (unsigned)M21->frames_total);
-    } else if (M21->hw_ok) {
-      WSContentSend_PD(PSTR("{s}" M21_LABEL "{m}waiting for frame "
-                            "(%u rcvd){e}"), (unsigned)M21->frames_total);
-    } else {
-      WSContentSend_PD(PSTR("{s}" M21_LABEL "{m}hardware off{e}"));
-    }
+    // Web UI: Werte immer anzeigen (vor dem ersten Frame eben 0).
+    WSContentSend_PD(PSTR("{s}" D_VOLUME "{m}%3_f " D_UNIT_CUBIC_METER "{e}"),
+                    &M21->total_m3);
+    WSContentSend_PD(PSTR("{s}Volume Target{m}%3_f " D_UNIT_CUBIC_METER "{e}"),
+                    &M21->target_m3);
+    WSContentSend_PD(PSTR("{s}Flow/min{m}%1_f L{e}"),
+                    &M21->flow_per_min_l);
+    WSContentSend_PD(PSTR("{s}Flow Temperatur{m}%d " D_UNIT_DEGREE D_UNIT_CELSIUS "{e}"),
+                    M21->flow_temp_c);
+    WSContentSend_PD(PSTR("{s}Ambient Temperatur{m}%d " D_UNIT_DEGREE D_UNIT_CELSIUS "{e}"),
+                    M21->ambient_temp_c);
+    WSContentSend_PD(PSTR("{s}RSSI{m}%d dBm{e}"),
+                    M21->last_rssi_dbm);
+    WSContentSend_PD(PSTR("{s}" M21_LABEL " Frames{m}%u / %u%s{e}"),
+                    (unsigned)M21->frames_valid, (unsigned)M21->frames_total,
+                    M21->hw_ok ? (M21->have_data ? "" : " (waiting)") : " (HW off)");
 #endif  // USE_WEBSERVER
   }
 }
 
 static void M21EverySecond(void) {
-  if (!M21 || !M21->have_data) { return; }
+  if (!M21) { return; }
+
+  // --- Flow-per-minute calculation (runs every second, even before have_data) ---
+  if (M21->have_data) {
+    // Store current total in ring buffer
+    uint8_t idx = M21->flow_ring_idx;
+    M21->flow_ring[idx] = M21->total_m3;
+    M21->flow_ring_idx = (idx + 1) % 60;
+    if (M21->flow_ring_count < 60) { M21->flow_ring_count++; }
+
+    // Calculate difference between newest and oldest entry
+    if (M21->flow_ring_count >= 2) {
+      uint8_t oldest = (M21->flow_ring_count < 60)
+                       ? 0
+                       : M21->flow_ring_idx;  // next write pos = oldest
+      float diff = M21->total_m3 - M21->flow_ring[oldest];
+      // Scale to full minute if ring not yet full
+      if (M21->flow_ring_count < 60) {
+        diff = diff * 60.0f / (float)M21->flow_ring_count;
+      }
+      M21->flow_per_min_l = diff * 1000.0f;   // m³ -> Liter
+    }
+  }
+
+  // --- Periodic telemetry publish (M21Period) ---
+  if (!M21->have_data) { return; }
   uint16_t period = M21->cfg.telemetry_period;
   if (!period) { return; }                      // 0 -> only via TelePeriod
 
