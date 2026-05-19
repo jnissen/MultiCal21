@@ -336,3 +336,15 @@ Voraussetzung: Tasmota-Integration in HA installiert und MQTT verbunden.
 | Frames empfangen, aber `Valid: 0` | Falscher Key → beim Wasserversorger den richtigen anfordern |
 | Keine Frames | Zähler außer Reichweite, Antenne am CC1101 prüfen |
 | HA zeigt keine Sensoren | `SetOption19 1` → `SetOption19 0` → `Restart 1`, dann HA Integration neu laden |
+
+---
+
+## Geänderte Dateien (gegenüber Upstream)
+
+| Datei | Beschreibung |
+|---|---|
+| `tasmota/tasmota_xsns_sensor/xsns_121_multical21.ino` | Treiber: JSON-Umbau für HA-Discovery, Flow/min-Sensor, Web-UI-Anpassungen |
+| `tasmota/user_config_override.h` | `HOME_ASSISTANT_DISCOVERY_ENABLE false` (SetOption19 0 als Default) |
+| `platformio_override.ini` | Build-Variante auf `tasmota-sensors` umgestellt |
+| `MULTICAL21.md` | Dokumentation (deutsch) |
+| `MULTICAL21_EN.md` | Dokumentation (englisch) |
