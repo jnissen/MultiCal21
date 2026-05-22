@@ -58,6 +58,15 @@
 #define XSNS_121                       121
 
 #include <SPI.h>
+
+// When USE_WMBUS_RADIO is defined the modular SX1262 (or other) radio is
+// owned by xdrv_128_wmbus_radio. xsns_121 then skips its own CC1101
+// initialisation and instead registers a frame callback at xdrv_128.
+// The CC1101 path inside this file remains intact for backward
+// compatibility with existing ESP8266 / direct-CC1101 hardware.
+#ifdef USE_WMBUS_RADIO
+  extern void WMBusRegisterDecoder(void (*cb)(const uint8_t*, size_t, int16_t));
+#endif
 // Self-contained AES-128 ECB (public-domain, derived from tiny-AES-c by Kokke).
 // Avoids any dependency on external crypto libraries so the driver builds in
 // every Tasmota environment (tasmota, tasmota-sensors, ESP8266, ESP32, ...).
@@ -719,10 +728,60 @@ static void M21AllocState(void) {
   M21LoadCfg();
 }
 
+#ifdef USE_WMBUS_RADIO
+// Frame callback for the modular radio layer. The payload contract matches
+// what M21Receive()/M21HandleFrame() expect: starts at the wM-Bus C-field,
+// length excludes the L-field (which the radio backend has stripped).
+static void M21OnExternalFrame(const uint8_t *payload, size_t len, int16_t rssi_dbm) {
+  if (!M21) { return; }
+  if (len == 0 || len > 255) { return; }
+  M21->last_rssi_dbm = (int8_t)((rssi_dbm < -128) ? -128 : (rssi_dbm > 127 ? 127 : rssi_dbm));
+  M21->frames_total++;
+  if (M21->configured) {
+    M21HandleFrame((uint8_t)len, payload);
+  }
+}
+#endif  // USE_WMBUS_RADIO
+
+/*-------------------------------------------------------------------------------------------*\
+ * Public accessor for consumers that want to mirror the meter state
+ * (e.g. the OLED HUD driver xdrv_129_wmbus_display.ino).
+ *
+ * Returns false if no state is initialised yet. `out_have_data` reflects whether
+ * at least one valid telegram has been decoded since boot.
+\*-------------------------------------------------------------------------------------------*/
+#include "wmbus_display_snapshot.h"
+
+bool M21GetDisplaySnapshot(void *out_ptr) {
+  M21DisplaySnapshot *out = (M21DisplaySnapshot *)out_ptr;
+  if (!M21 || !out) { return false; }
+  out->have_data       = M21->have_data;
+  out->configured      = M21->configured;
+  out->total_m3        = M21->total_m3;
+  out->target_m3       = M21->target_m3;
+  out->flow_temp_c     = M21->flow_temp_c;
+  out->ambient_temp_c  = M21->ambient_temp_c;
+  out->last_rssi_dbm   = M21->last_rssi_dbm;
+  out->frames_valid    = M21->frames_valid;
+  out->frames_total    = M21->frames_total;
+  out->last_valid_ms   = M21->last_valid_ms;
+  return true;
+}
+
 static void M21Init(void) {
   M21AllocState();
   if (!M21) { return; }
   if (M21->hw_ok) { return; }                        // already up
+
+#ifdef USE_WMBUS_RADIO
+  // Modular SX1262 path: xdrv_128 owns the radio, we just listen.
+  WMBusRegisterDecoder(&M21OnExternalFrame);
+  M21->hw_ok = true;
+  AddLog(LOG_LEVEL_INFO, PSTR("M21: registered with WMBus radio, cfg=%s"),
+         M21->configured ? PSTR("ok") : PSTR("missing"));
+  return;
+#endif
+
   if (!PinUsed(GPIO_CC1101_GDO0)) { return; }
   if (TasmotaGlobal.spi_enabled != SPI_MOSI_MISO) { return; }
   if (!PinUsed(GPIO_SPI_CS)) { return; }
@@ -768,12 +827,18 @@ static void M21Init(void) {
 
 static void M21Poll(void) {
   if (!M21 || !M21->hw_ok) { return; }
+#ifdef USE_WMBUS_RADIO
+  // Frames are dispatched asynchronously via M21OnExternalFrame(); nothing
+  // to do here when the modular radio layer is active.
+  return;
+#else
   if (!M21_packet_flag) { return; }
 
   detachInterrupt(digitalPinToInterrupt(M21->pin_gdo0));
   M21_packet_flag = false;
   M21Receive();
   attachInterrupt(digitalPinToInterrupt(M21->pin_gdo0), M21Gdo0Isr, FALLING);
+#endif
 }
 
 /*-------------------------------------------------------------------------------------------*\

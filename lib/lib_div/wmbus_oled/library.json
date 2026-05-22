@@ -1,0 +1,13 @@
+{
+  "name": "wmbus_oled",
+  "version": "0.1.0",
+  "description": "Minimal SSD1306 128x64 I2C OLED helper for the wM-Bus / Multical21 driver (Heltec WiFi LoRa 32 V3). Tasmota-independent, framebuffer-based, 5x7 ASCII font.",
+  "keywords": ["ssd1306", "oled", "wmbus", "multical21", "heltec"],
+  "license": "Apache-2.0",
+  "frameworks": "arduino",
+  "platforms": ["espressif32", "espressif8266"],
+  "build": {
+    "srcDir": "src",
+    "includeDir": "src"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "wmbus",
+  "version": "0.1.0",
+  "description": "Modular Wireless M-Bus (mode C1) reception + Kamstrup Multical21 decoder. Radio-agnostic decoder, pluggable radio backends (SX1262 via RadioLib, CC1101).",
+  "keywords": ["wmbus", "multical21", "kamstrup", "oms", "sx1262", "cc1101"],
+  "frameworks": "arduino",
+  "platforms": ["espressif8266", "espressif32"],
+  "build": {
+    "flags": ["-I src"],
+    "srcFilter": ["+<*.c>", "+<*.cpp>"]
+  },
+  "dependencies": {
+    "RadioLib": "*"
+  }
+}

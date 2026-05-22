@@ -711,6 +711,18 @@
   #define USE_LORA_SX127X                      // Add driver support for LoRa on SX127x based devices like M5Stack LoRa868, RFM95W (+5k code)
   #define USE_LORAWAN_BRIDGE                   // Add support for LoRaWan bridge (+8k code)
 
+// The modular wM-Bus radio (xdrv_128_wmbus_radio.ino) is mutually exclusive
+// with the generic LoRa stack because both claim the same SX1262 module and
+// instantiate a RadioLib SX1262 global. When USE_WMBUS_RADIO is requested
+// (e.g. by the tasmota32s3-heltec-wmbus env) we disable the LoRa stack so
+// only one driver owns the radio.
+#ifdef USE_WMBUS_RADIO
+  #undef USE_SPI_LORA
+  #undef USE_LORA_SX126X
+  #undef USE_LORA_SX127X
+  #undef USE_LORAWAN_BRIDGE
+#endif
+
 #define USE_MHZ19                                // Add support for MH-Z19 CO2 sensor (+2k code)
 #define USE_SENSEAIR                             // Add support for SenseAir K30, K70 and S8 CO2 sensor (+2k3 code)
 #define USE_CM110x                               // Add support for CM110x CO2 sensors (+2k7 code)
