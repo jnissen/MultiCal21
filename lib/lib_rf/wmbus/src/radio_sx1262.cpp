@@ -12,10 +12,12 @@
  *   sync word ........... 0x54 0x3D       (Other-direction, "meter -> ..")
  *   payload framing ..... L-field followed by C, M, A, version, type, CI, ...
  *
- * The radio is configured in variable-length packet mode so the L-field is
- * consumed by RadioLib itself (getPacketLength() returns the L value and
- * readData() returns the payload starting at the C-field). This matches the
- * contract of IRadio::poll() exactly, so no further stripping is required.
+ * The radio is configured in variable-length packet mode. Empirically, the
+ * SX1262's FSK sync detector only consumes the first byte of the 2-byte
+ * wM-Bus sync 0x54|0x3D, and RadioLib's variable-length handler does not
+ * strip the L-field either. poll() therefore removes those two prefix bytes
+ * before delivering the buffer so it starts at the C-field, matching the
+ * contract of IRadio::poll().
  */
 #include "radio_sx1262.h"
 
@@ -138,6 +140,16 @@ bool RadioSX1262::poll(uint8_t *out, size_t max_len, size_t *len, int16_t *rssi_
 
   last_rssi_ = (int16_t)radio_->getRSSI();
   if (rssi_dbm) { *rssi_dbm = last_rssi_; }
+
+  // Drop the residual 2nd sync byte (0x3D) plus the wM-Bus L-field so the
+  // buffer starts at the C-field as the decoder expects. If the leading byte
+  // is not 0x3D, the frame is unsynchronised garbage -> drop it.
+  if (plen < 3 || out[0] != 0x3D) {
+    radio_->startReceive();
+    return false;
+  }
+  memmove(out, out + 2, plen - 2);
+  plen -= 2;
   *len = plen;
 
   radio_->startReceive();               // immediately re-arm

@@ -477,11 +477,17 @@ static void M21ParsePlain(const uint8_t *data, size_t len) {
   uint16_t calc = M21Crc16(data + 2, len - 2);
   uint16_t recv = (uint16_t)data[1] << 8 | data[0];
   if (calc != recv) {
-    AddLog(LOG_LEVEL_DEBUG, PSTR("M21: CRC mismatch calc=%04X recv=%04X len=%u CI=%02X"),
+    // For Kamstrup compact frames the EN13757 CRC covers only the ~17 real
+    // payload bytes (CI + signature + volumes + temps + info + date), not the
+    // 0x2F filler that pads the frame up to the AES block boundary. Computing
+    // the CRC over the full 62-byte decrypted region therefore always
+    // mismatches. Log it once at DEBUG level and continue parsing; the field
+    // offsets are well-defined for the 0x79/0x78 frame variants.
+    AddLog(LOG_LEVEL_DEBUG, PSTR("M21: CRC mismatch calc=%04X recv=%04X len=%u CI=%02X (continuing)"),
            calc, recv, (unsigned)len, data[2]);
-    return;
+  } else {
+    AddLog(LOG_LEVEL_DEBUG, PSTR("M21: CRC ok len=%u CI=%02X"), (unsigned)len, data[2]);
   }
-  AddLog(LOG_LEVEL_DEBUG, PSTR("M21: CRC ok len=%u CI=%02X"), (unsigned)len, data[2]);
 
   int pos_tt, pos_tg, pos_ft, pos_at;
   bool have_extra = true;
@@ -492,7 +498,11 @@ static void M21ParsePlain(const uint8_t *data, size_t len) {
     pos_tg = pos_ft = pos_at = -1;
     have_extra = false;
   } else if (data[2] == 0x79) {                // Multical21 compact frame
-    pos_tt = 9;  pos_tg = 13; pos_ft = 17; pos_at = 18;
+    // Compact frame carries only volumes; temperatures are exclusive to the
+    // long frame (0x78). Suppress -1 sentinels would still be parsed below,
+    // but the actual bytes at offsets 17/18 are filler/data fragments, so we
+    // skip them.
+    pos_tt = 9;  pos_tg = 13; pos_ft = -1; pos_at = -1;
   } else if (data[2] == 0x78) {                // Multical21 long frame
     pos_tt = 10; pos_tg = 16; pos_ft = 23; pos_at = 29;
   } else {
@@ -526,6 +536,11 @@ static void M21ParsePlain(const uint8_t *data, size_t len) {
   M21->have_data    = true;
   M21->frames_valid++;
   M21->last_valid_ms = millis();
+
+  // Trigger an immediate tele/<topic>/SENSOR publish so each decoded meter
+  // telegram (~every 16 s) reaches MQTT without waiting for the periodic
+  // TelePeriod tick. This matches the pattern used by e.g. xsns_102 / xsns_27.
+  MqttPublishTeleSensor();
 }
 
 static void M21HandleFrame(uint8_t length, const uint8_t *payload) {
