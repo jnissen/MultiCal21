@@ -133,22 +133,73 @@ Empfohlen für Setups **ohne LoRa‑Onboard‑Chip**, z. B. Wemos D1 Mini, ESP32
 
 > **Status:** Im neuen `xdrv_128`-Stack ist das CC1101‑Backend vorbereitet, aber noch nicht aktiv. Bis dahin: Hardware bereits jetzt verdrahten und mit dem klassischen Pfad aus [MULTICAL21.md](MULTICAL21.md) betreiben.
 
-### Beispiel‑Verdrahtung (ESP32‑C3 SuperMini)
+### 2.1 Wemos D1 Mini (ESP8266) – getestet
 
-| CC1101 Pin | Funktion | ESP32‑C3 GPIO | Tasmota‑Template |
+Klassische Verdrahtung wie im Originalprojekt `pthalin/esp32-multical21`:
+
+| CC1101 Pin | Funktion | D1 Mini Pin | GPIO |
+|---|---|---|---|
+| VCC  | 3.3 V    | 3V3 | – |
+| GND  | GND      | GND | – |
+| SCK  | SPI CLK  | D5 | GPIO 14 |
+| MISO | SPI MISO | D6 | GPIO 12 |
+| MOSI | SPI MOSI | D7 | GPIO 13 |
+| CSN  | SPI CS   | D8 | GPIO 15 |
+| GDO0 | IRQ      | D2 | GPIO 4  |
+| GDO2 | (optional) | – | – |
+
+**Template (Tasmota Web‑UI → Configuration → Configure Other → Template):**
+
+```json
+{"NAME":"Multical 21 D1Mini","ARCH":"ESP8266","GPIO":[0,0,0,0,4544,0,0,0,672,704,736,768,0,0],"FLAG":0,"BASE":18}
+```
+
+Anschließend per Konsole aktivieren:
+
+```text
+Backlog Module 0; Restart 1
+```
+
+Code‑Mapping des Templates (BASE 18 = Wemos D1 R2 & Mini):
+
+| GPIO | Code | Funktion |
+|---|---|---|
+| GPIO 4  | `4544` | `CC1101 GDO0` |
+| GPIO 12 | `672`  | `SPI MISO` |
+| GPIO 13 | `704`  | `SPI MOSI` |
+| GPIO 14 | `736`  | `SPI CLK`  |
+| GPIO 15 | `768`  | `SPI CS`   |
+
+### 2.2 ESP32‑C3 SuperMini – Beispiel‑Verdrahtung
+
+| CC1101 Pin | Funktion | ESP32‑C3 GPIO | Tasmota‑GPIO‑Label |
 |---|---|---|---|
 | VCC  | 3.3 V    | 3V3 | – |
 | GND  | GND      | GND | – |
 | SCK  | SPI CLK  | GPIO 4 | `SPI CLK` |
 | MISO | SPI MISO | GPIO 5 | `SPI MISO` |
 | MOSI | SPI MOSI | GPIO 6 | `SPI MOSI` |
-| CSN  | SPI CS   | GPIO 7 | `CC1101 CS` |
+| CSN  | SPI CS   | GPIO 7 | `SPI CS` |
 | GDO0 | IRQ      | GPIO 8 | `CC1101 GDO0` |
 | GDO2 | (optional) | – | – |
 
+**Template (experimentell, BASE 1 = generic ESP32‑C3):**
+
+```json
+{"NAME":"Multical 21 C3","GPIO":[0,0,0,0,736,672,704,768,4544,0,0,0,0,0,0,0,0,0,0,0,0,0],"FLAG":0,"BASE":1}
+```
+
+Aktivieren:
+
+```text
+Backlog Module 0; Restart 1
+```
+
+> Funktioniert exakt diese Belegung bei deinem Board nicht out‑of‑the‑box, empfiehlt sich der manuelle Weg: *Configure Module → Module type = ESP32‑C3 Generic*, dann pro Pin oben aufgeführtes Label aus dem Dropdown wählen.
+
 ANT‑Pin am CC1101: 17.4 cm Draht (λ/4 für 868 MHz) oder eine 868 MHz SMA‑Antenne.
 
-### Build‑Flag
+### 2.3 Build‑Flag
 
 In [platformio_override.ini](platformio_override.ini) ein eigenes Env anlegen, Beispiel:
 
@@ -161,7 +212,7 @@ build_flags = ${env:tasmota32c3.build_flags}
               ; -DUSE_WMBUS_OLED   ; (nur falls SSD1306 vorhanden)
 ```
 
-### CC1101 vs. SX1262
+### 2.4 CC1101 vs. SX1262
 
 Der Decoder (`xsns_121`) und alle `M21*`‑Befehle sind **funkchip‑agnostisch**. Sobald das passende Backend instanziert ist, gelten exakt dieselben Backlogs wie unter Heltec.
 

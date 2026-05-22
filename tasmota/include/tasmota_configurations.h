@@ -1161,4 +1161,298 @@
   #endif
 #endif
 
+/*********************************************************************************************\
+ * wM-Bus / Multical21 Build-Slim (FINAL pass)
+ * Aktiv nur wenn -DUSE_WMBUS_RADIO gesetzt ist (env tasmota32s3-heltec-wmbus).
+ * Muss am ENDE dieser Datei stehen, weil tasmota_configurations.h nach dem
+ * tasmota_configurations_ESP32.h-Include noch Post-Processing-Bloecke ausfuehrt,
+ * die USE_LIGHT/USE_UFILESYS u.a. aus anderen USE_*-Flags wieder herleiten.
+ * Andere Builds (z.B. tasmota32, tasmota) bleiben unveraendert.
+\*********************************************************************************************/
+#ifdef USE_WMBUS_RADIO
+
+// --- TLS / Crypto ---
+#undef USE_MQTT_TLS
+#undef USE_MQTT_AWS_IOT
+#undef USE_MQTT_AWS_IOT_LIGHT
+#undef USE_4K_RSA
+#undef USE_TLS_CACERT_BUF
+#undef USE_TLS
+#undef USE_WEBCLIENT_HTTPS         // Outgoing HTTPS (BearSSL) - spart ~42KB; OTA faellt auf HTTP zurueck
+#undef USE_DISCOVERY              // mDNS
+
+// --- Integrationen ---
+#undef USE_TELEGRAM
+#undef USE_PROMETHEUS
+#undef USE_DOMOTICZ
+#undef USE_HOME_ASSISTANT
+#undef USE_KNX
+#undef USE_KNX_WEB_MENU
+#undef USE_INFLUXDB
+#undef USE_TASMOTA_CLIENT
+#undef USE_THERMOSTAT
+#undef USE_SCRIPT
+#undef USE_RULES_COMPRESSION
+#undef USE_EXPRESSION
+#undef USE_TFS
+#undef USE_ZIGBEE
+#undef USE_ZIGBEE_EZSP
+#undef USE_BERRY
+#undef USE_BERRY_DEBUG
+#undef USE_BERRY_PYTHON_COMPAT
+#undef USE_BERRY_PARTITION_WIZARD
+#undef USE_BERRY_CRYPTO_AES_GCM
+#undef USE_BERRY_CRYPTO_AES_CTR
+#undef USE_BERRY_CRYPTO_AES_CCM
+#undef USE_BERRY_CRYPTO_AES_CBC
+#undef USE_BERRY_CRYPTO_EC_P256
+#undef USE_BERRY_CRYPTO_RSA
+#undef USE_BERRY_CRYPTO_PBKDF2_HMAC_SHA256
+#undef USE_BERRY_CRYPTO_SPAKE2P_MATTER
+#undef USE_AUTOCONF
+#undef USE_MATTER_DEVICE
+#undef USE_WEBCAM
+#undef USE_TASMESH
+
+// --- Emulation (Hue/Wemo) - Trigger fuer USE_LIGHT ---
+#undef USE_EMULATION
+#undef USE_EMULATION_HUE
+#undef USE_EMULATION_WEMO
+
+// --- Funk / Bridges ---
+#undef USE_RC_SWITCH
+#undef USE_RF_FLASH
+#undef USE_RF_SENSOR
+#undef USE_SONOFF_RF
+#undef USE_SONOFF_SC
+#undef USE_TUYA_MCU                // Trigger fuer USE_LIGHT
+#undef USE_TUYAMCUBR
+#undef USE_PS_16_DZ
+#undef USE_RDM6300
+#undef USE_RFID_RC522
+#undef USE_RFXTRX
+#undef USE_TASMOTA_SLAVE
+#undef USE_OPENTHERM
+#undef USE_LMT01
+#undef USE_PN532_HSU
+#undef USE_GPS
+#undef USE_HM10
+#undef USE_HRXL
+#undef USE_LORAWAN_BRIDGE
+#undef USE_LORA_SX126X
+#undef USE_LORA_SX127X
+#undef USE_SPI_LORA
+#undef USE_MODBUS_BRIDGE
+#undef USE_SERIAL_BRIDGE
+#undef USE_MP3_PLAYER
+#undef USE_ARILUX_RF               // Trigger fuer USE_LIGHT
+
+// --- IR ---
+#undef USE_IR_REMOTE
+#undef USE_IR_REMOTE_FULL
+#undef USE_IR_SEND_NEC
+#undef USE_IR_SEND_RC5
+#undef USE_IR_SEND_RC6
+#undef USE_IR_RECEIVE
+
+// --- BLE / Beacons ---
+#undef USE_BLE_ESP32
+#undef USE_MI_ESP32
+#undef USE_IBEACON
+#undef USE_IBEACON_ESP32
+#undef USE_HM17
+#undef USE_NRF24
+#undef USE_MIBLE
+#undef USE_BT_HCI
+
+// --- Energie-Monitor-ICs ---
+#undef USE_ENERGY_SENSOR
+#undef USE_SHELLY_PRO
+#undef USE_PZEM004T
+#undef USE_PZEM_AC
+#undef USE_PZEM_DC
+#undef USE_MCP39F501
+#undef USE_HLW8012
+#undef USE_CSE7766
+#undef USE_CSE7761
+#undef USE_BL09XX
+#undef USE_ADE7880
+#undef USE_ADE7953
+#undef USE_SDM72
+#undef USE_SDM120
+#undef USE_SDM220
+#undef USE_SDM230
+#undef USE_SDM630
+#undef USE_DDS2382
+#undef USE_DDSU666
+#undef USE_SOLAX_X1
+#undef USE_LE01MR
+#undef USE_BL6523
+#undef USE_IEM3000
+#undef USE_WE517
+#undef USE_MODBUS_ENERGY
+
+// --- CO2 / Luft / Klima / Temperatur ---
+#undef USE_MHZ19
+#undef USE_SENSEAIR
+#undef USE_CM110x
+#undef USE_SCD30
+#undef USE_SCD40
+#undef USE_SGP30
+#undef USE_SGP40
+#undef USE_SGP4X
+#undef USE_VINDRIKTNING
+#undef USE_HPMA
+#undef USE_NOVA_SDS
+#undef USE_PMSX003
+#undef USE_PMS5003
+#undef USE_SPS30
+#undef USE_T67XX
+#undef USE_DHT
+#undef USE_DS18x20
+#undef USE_DS18B20
+#undef USE_BMP
+#undef USE_BME680
+#undef USE_BMP280
+#undef USE_BME280
+#undef USE_AHT1x
+#undef USE_AHT2x
+#undef USE_AM2320
+#undef USE_HTU
+#undef USE_HYT
+#undef USE_SHT
+#undef USE_SHT3X
+#undef USE_SHT4X
+#undef USE_SI1145
+#undef USE_TSL2561
+#undef USE_TSL2591
+#undef USE_BH1750
+#undef USE_VEML6070
+#undef USE_VEML6075
+#undef USE_VEML7700
+#undef USE_VL53L0X
+#undef USE_VL53L1X
+#undef USE_MAX31855
+#undef USE_MAX31865
+#undef USE_MAX44009
+#undef USE_LM75AD
+#undef USE_MGS
+#undef USE_APDS9960
+#undef USE_TCS34725
+#undef USE_MGC3130
+#undef USE_MPR121
+#undef USE_CCS811
+#undef USE_ENS16x
+#undef USE_ENS210
+#undef USE_HDC1080
+#undef USE_HDC2010
+#undef USE_HIH6
+#undef USE_INA219
+#undef USE_INA226
+#undef USE_INA3221
+#undef USE_MCP230xx
+#undef USE_MCP23XXX_DRV
+#undef USE_PCA9685
+#undef USE_PCA9685_V2
+#undef USE_PCA9632
+#undef USE_PCF8574
+#undef USE_PCF85063
+#undef USE_PCF8563
+#undef USE_DS1624
+#undef USE_DS1338
+#undef USE_DS1307
+#undef USE_DS3231
+#undef USE_RTC_CHIPS
+#undef USE_MLX90614
+#undef USE_MLX90640
+#undef USE_MAX17043
+#undef USE_BQ27621
+#undef USE_BQ27441
+#undef USE_DAC8571
+#undef USE_AS3935
+#undef USE_AS5600
+#undef USE_LOX_O2
+#undef USE_LD2410
+#undef USE_LD2410S
+#undef USE_LD2402
+#undef USE_BIOPDU
+#undef USE_HM330X
+#undef USE_NEOPOOL
+#undef USE_SR04
+#undef USE_ME007
+#undef USE_DYP
+#undef USE_MS5837
+#undef USE_BMP180
+#undef USE_HE853
+#undef USE_AZ7798
+#undef USE_TEMPHUM
+#undef USE_HRE
+
+// --- Displays != SSD1306 OLED ---
+#undef USE_DISPLAY
+#undef USE_DISPLAY_LCD
+#undef USE_DISPLAY_MATRIX
+#undef USE_DISPLAY_TM1637
+#undef USE_DISPLAY_TM1638
+#undef USE_DISPLAY_SSD1351
+#undef USE_DISPLAY_ILI9341
+#undef USE_DISPLAY_ILI9342
+#undef USE_DISPLAY_ILI9488
+#undef USE_DISPLAY_EPAPER_29
+#undef USE_DISPLAY_EPAPER_42
+#undef USE_DISPLAY_SH1106
+#undef USE_DISPLAY_ST7735
+#undef USE_DISPLAY_ST7789
+#undef USE_DISPLAY_RA8876
+#undef USE_DISPLAY_SEVENSEG
+#undef USE_DISPLAY_MAX7219_MATRIX
+#undef USE_DISPLAY_MAX7219
+#undef USE_DISPLAY_TOUCH_CTP
+#undef USE_DISPLAY_TM1621_SONOFF
+#undef USE_LVGL
+
+// --- Audio / Touch / Watch ---
+#undef USE_I2S_AUDIO
+#undef USE_I2S
+#undef USE_I2S_AUDIO_MP3
+#undef USE_I2S_MP3
+#undef USE_I2S_WEBRADIO
+#undef USE_TTGO_WATCH
+#undef USE_M5STACK_CORE2
+#undef USE_FT5206
+#undef USE_BUZZER
+
+// --- Licht / LED-Treiber / Dimmer (zuletzt; USE_LIGHT-Trigger sind bereits oben undef'd) ---
+#undef USE_LIGHT
+#undef USE_LIGHT_PALETTE
+#undef USE_LIGHT_VIRTUAL_CT
+#undef USE_WS2812
+#undef USE_WS2812_DMA
+#undef USE_MY92X1
+#undef USE_SM16716
+#undef USE_SM2135
+#undef USE_SM2335
+#undef USE_BP1658CJ
+#undef USE_BP5758D
+#undef USE_TUYA_DIMMER
+#undef USE_ARMTRONIX_DIMMERS
+#undef USE_AC_ZERO_CROSS_DIMMER
+#undef USE_PWM_DIMMER
+#undef USE_PWM_DIMMER_REMOTE
+#undef USE_DEVICE_GROUPS
+#undef USE_DEVICE_GROUPS_SEND
+#undef USE_SHUTTER
+#undef USE_COUNTER
+#undef USE_ADC_VCC
+#undef USE_HX711
+#undef USE_TX20_WIND_SENSOR
+#undef USE_TX23_WIND_SENSOR
+#undef USE_WINDMETER
+#undef USE_FROGGIT
+#undef USE_DEEPSLEEP_LWT
+#undef USE_DALI
+#undef USE_ESP32_TWAI
+
+#endif  // USE_WMBUS_RADIO
+
 #endif  // _TASMOTA_CONFIGURATIONS_H_

@@ -209,11 +209,12 @@ typedef struct {
   bool     hw_ok;                // SPI/CC1101 initialised
   bool     configured;           // key + meter id set
   bool     have_data;            // at least one valid frame decoded
+  bool     have_temp;            // at least one *valid* long-frame temp seen
 
   float    total_m3;
   float    target_m3;
-  int8_t   flow_temp_c;
-  int8_t   ambient_temp_c;
+  uint8_t  flow_temp_c;          // Multical21 stores temps as unsigned °C (0..127, 0xFF=invalid)
+  uint8_t  ambient_temp_c;
   int8_t   last_rssi_dbm;
 
   uint32_t frames_total;
@@ -499,15 +500,19 @@ static void M21ParsePlain(const uint8_t *data, size_t len) {
     have_extra = false;
   } else if (data[2] == 0x79) {                // Multical21 compact frame
     // Compact frame carries only volumes; temperatures are exclusive to the
-    // long frame (0x78). Suppress -1 sentinels would still be parsed below,
-    // but the actual bytes at offsets 17/18 are filler/data fragments, so we
-    // skip them.
+    // long frame (0x78). Explicitly clear any stale temperature state so a
+    // single long-frame value never persists across all later publishes.
     pos_tt = 9;  pos_tg = 13; pos_ft = -1; pos_at = -1;
+    M21->flow_temp_c    = 0;
+    M21->ambient_temp_c = 0;
+    M21->have_temp      = false;
   } else if (data[2] == 0x78) {                // Multical21 long frame
     pos_tt = 10; pos_tg = 16; pos_ft = 23; pos_at = 29;
   } else {
     return;
   }
+  AddLog(LOG_LEVEL_DEBUG, PSTR("M21: parse CI=%02X compact=%d have_temp=%d"),
+         data[2], (data[2] == 0x79) ? 1 : 0, M21->have_temp ? 1 : 0);
 
   if ((size_t)(pos_tt + 4) > len) { return; }
 
@@ -527,10 +532,21 @@ static void M21ParsePlain(const uint8_t *data, size_t len) {
     M21->target_m3 = (float)tg / 1000.0f;
   }
   if (have_extra && pos_ft >= 0 && (size_t)pos_ft < len) {
-    M21->flow_temp_c = (int8_t)data[pos_ft];
+    uint8_t v = data[pos_ft];
+    // Multical21 long frame: temperature in unsigned °C, 0xFF means invalid.
+    // Cap to a physically plausible range to reject misaligned bytes from
+    // foreign meters that may have CI=0x78 with a different layout.
+    if (v != 0xFF && v <= 100) {
+      M21->flow_temp_c = v;
+      M21->have_temp   = true;
+    }
   }
   if (have_extra && pos_at >= 0 && (size_t)pos_at < len) {
-    M21->ambient_temp_c = (int8_t)data[pos_at];
+    uint8_t v = data[pos_at];
+    if (v != 0xFF && v <= 100) {
+      M21->ambient_temp_c = v;
+      M21->have_temp      = true;
+    }
   }
 
   M21->have_data    = true;
@@ -808,8 +824,8 @@ bool M21GetDisplaySnapshot(void *out_ptr) {
   out->configured      = M21->configured;
   out->total_m3        = M21->total_m3;
   out->target_m3       = M21->target_m3;
-  out->flow_temp_c     = M21->flow_temp_c;
-  out->ambient_temp_c  = M21->ambient_temp_c;
+  out->flow_temp_c     = (int8_t)M21->flow_temp_c;
+  out->ambient_temp_c  = (int8_t)M21->ambient_temp_c;
   out->last_rssi_dbm   = M21->last_rssi_dbm;
   out->frames_valid    = M21->frames_valid;
   out->frames_total    = M21->frames_total;
@@ -912,13 +928,17 @@ static void M21Show(bool json) {
     ResponseAppend_P(PSTR(",\"Volume\":{\"Value\":%3_f},"
                          "\"VolumeTarget\":{\"Value\":%3_f},"
                          "\"FlowPerMin\":{\"Value\":%1_f},"
-                         "\"RSSI\":{\"Value\":%d},"
-                         "\"Flow\":{\"Temperature\":%d},"
-                         "\"Ambient\":{\"Temperature\":%d}"),
+                         "\"RSSI\":{\"Value\":%d}"),
                     &M21->total_m3, &M21->target_m3,
                     &M21->flow_per_min_l,
-                    M21->last_rssi_dbm,
-                    M21->flow_temp_c, M21->ambient_temp_c);
+                    M21->last_rssi_dbm);
+    if (M21->have_temp) {
+      // Long-frame only (≈1x/day); omit until we have a real reading so HA
+      // discovery does not lock in garbage like -24/-72 °C from foreign meters.
+      ResponseAppend_P(PSTR(",\"Flow\":{\"Temperature\":%u},"
+                            "\"Ambient\":{\"Temperature\":%u}"),
+                       (unsigned)M21->flow_temp_c, (unsigned)M21->ambient_temp_c);
+    }
 #ifdef USE_WEBSERVER
   } else {
     // Web UI: Werte immer anzeigen (vor dem ersten Frame eben 0).
@@ -928,10 +948,15 @@ static void M21Show(bool json) {
                     &M21->target_m3);
     WSContentSend_PD(PSTR("{s}Flow/min{m}%1_f L{e}"),
                     &M21->flow_per_min_l);
-    WSContentSend_PD(PSTR("{s}Flow Temperatur{m}%d " D_UNIT_DEGREE D_UNIT_CELSIUS "{e}"),
-                    M21->flow_temp_c);
-    WSContentSend_PD(PSTR("{s}Ambient Temperatur{m}%d " D_UNIT_DEGREE D_UNIT_CELSIUS "{e}"),
-                    M21->ambient_temp_c);
+    if (M21->have_temp) {
+      WSContentSend_PD(PSTR("{s}Flow Temperatur{m}%u " D_UNIT_DEGREE D_UNIT_CELSIUS "{e}"),
+                      (unsigned)M21->flow_temp_c);
+      WSContentSend_PD(PSTR("{s}Ambient Temperatur{m}%u " D_UNIT_DEGREE D_UNIT_CELSIUS "{e}"),
+                      (unsigned)M21->ambient_temp_c);
+    } else {
+      WSContentSend_PD(PSTR("{s}Flow Temperatur{m}n/a{e}"));
+      WSContentSend_PD(PSTR("{s}Ambient Temperatur{m}n/a{e}"));
+    }
     WSContentSend_PD(PSTR("{s}RSSI{m}%d dBm{e}"),
                     M21->last_rssi_dbm);
     WSContentSend_PD(PSTR("{s}" M21_LABEL " Frames{m}%u / %u%s{e}"),
