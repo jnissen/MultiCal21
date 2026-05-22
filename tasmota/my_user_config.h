@@ -582,7 +582,9 @@
 #define USE_PWM_DIMMER                           // Add support for MJ-SD01/acenx/NTONPOWER PWM dimmers (+2k3 code, DGR=0k7)
   #define USE_PWM_DIMMER_REMOTE                  // Add support for remote switches to PWM Dimmer (requires USE_DEVICE_GROUPS) (+0k6 code)
 //#define USE_KEELOQ                               // Add support for Jarolift rollers by Keeloq algorithm (+4k5 code)
+#ifndef USE_MULTICAL21
 #define USE_MULTICAL21                           // Add support for Kamstrup Multical21 / FlowIQ wM-Bus (C1) water meter via CC1101 on hardware SPI (+5k code)
+#endif
 //#define USE_WMBUS_RADIO                          // Modular wM-Bus radio frontend (xdrv_128); enables SX1262 backend for Heltec WiFi LoRa 32 V3 and similar ESP32-S3 boards. Mutually exclusive with USE_LORA_SX126X.
 #define USE_SONOFF_D1                            // Add support for Sonoff D1 Dimmer (+0k7 code)
 #define USE_SHELLY_DIMMER                        // Add support for Shelly Dimmer (+3k code)

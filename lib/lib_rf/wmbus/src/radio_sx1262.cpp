@@ -13,8 +13,9 @@
  *   payload framing ..... L-field followed by C, M, A, version, type, CI, ...
  *
  * The radio is configured in variable-length packet mode so the L-field is
- * consumed by RadioLib itself; readData() therefore returns the payload
- * starting at the C-field, exactly matching the contract of IRadio::poll().
+ * consumed by RadioLib itself (getPacketLength() returns the L value and
+ * readData() returns the payload starting at the C-field). This matches the
+ * contract of IRadio::poll() exactly, so no further stripping is required.
  */
 #include "radio_sx1262.h"
 

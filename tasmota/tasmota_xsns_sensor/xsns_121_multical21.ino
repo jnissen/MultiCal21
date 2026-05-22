@@ -529,14 +529,20 @@ static void M21ParsePlain(const uint8_t *data, size_t len) {
 }
 
 static void M21HandleFrame(uint8_t length, const uint8_t *payload) {
-  // Log every frame's meter id so the user can identify their meter
-  AddLog(LOG_LEVEL_DEBUG, PSTR("M21: RX id=%02X%02X%02X%02X len=%u rssi=%d dBm"),
-         payload[6], payload[5], payload[4], payload[3],
-         (unsigned)length, (int)M21->last_rssi_dbm);
-  // Verify meter id (payload[3..6] vs cfg meter_id, MSB-first vs LSB-first match)
+  // Per-frame diagnostic log is emitted from M21OnExternalFrame() before this
+  // function is reached (so it fires even when the meter is not configured).
+  // Here we only perform the actual ID-filter + decrypt + parse work.
+  // If the configured id is all-zero, run in promiscuous mode (accept any
+  // meter); decryption will still need a matching key to produce valid data.
+  bool id_set = false;
   for (uint8_t i = 0; i < 4; i++) {
-    if (M21->cfg.meter_id[i] != payload[6 - i]) {
-      return;                                  // not our meter
+    if (M21->cfg.meter_id[i]) { id_set = true; break; }
+  }
+  if (id_set) {
+    for (uint8_t i = 0; i < 4; i++) {
+      if (M21->cfg.meter_id[i] != payload[6 - i]) {
+        return;                                  // not our meter
+      }
     }
   }
   if (length < 18) { return; }
@@ -737,6 +743,34 @@ static void M21OnExternalFrame(const uint8_t *payload, size_t len, int16_t rssi_
   if (len == 0 || len > 255) { return; }
   M21->last_rssi_dbm = (int8_t)((rssi_dbm < -128) ? -128 : (rssi_dbm > 127 ? 127 : rssi_dbm));
   M21->frames_total++;
+  // Always log mfr+id so users can identify their meter even before any
+  // M21Key/M21Id is configured. Decoded mfr code is the 3-letter wM-Bus
+  // manufacturer ID (e.g. KAM = Kamstrup).
+  if (len >= 7) {
+    char mfr[4] = {'?', '?', '?', 0};
+    uint16_t mf = (uint16_t)payload[1] | ((uint16_t)payload[2] << 8);
+    mfr[0] = (char)(((mf >> 10) & 0x1F) + '@');
+    mfr[1] = (char)(((mf >>  5) & 0x1F) + '@');
+    mfr[2] = (char)(((mf      ) & 0x1F) + '@');
+    AddLog(LOG_LEVEL_DEBUG,
+           PSTR("M21: RX mfr=%s id=%02X%02X%02X%02X len=%u rssi=%d dBm"),
+           mfr,
+           payload[6], payload[5], payload[4], payload[3],
+           (unsigned)len, (int)rssi_dbm);
+    // Raw hex dump of the first 16 bytes so the actual frame layout can be
+    // inspected with `Weblog 4` — the radio backend may or may not strip the
+    // L-field depending on the chip's variable-length mode.
+    char hex[16 * 3 + 1];
+    static const char nib[] = "0123456789ABCDEF";
+    size_t n = (len < 16) ? len : 16;
+    for (size_t i = 0; i < n; i++) {
+      hex[3 * i]     = nib[payload[i] >> 4];
+      hex[3 * i + 1] = nib[payload[i] & 0x0F];
+      hex[3 * i + 2] = ' ';
+    }
+    hex[3 * n] = 0;
+    AddLog(LOG_LEVEL_DEBUG, PSTR("M21: RAW %s"), hex);
+  }
   if (M21->configured) {
     M21HandleFrame((uint8_t)len, payload);
   }
@@ -982,7 +1016,11 @@ static void M21CmndId(void) {
   if (!M21) { ResponseCmndError(); return; }
   if (XdrvMailbox.data_len > 0) {
     uint8_t buf[4];
-    if (!M21ParseHex(XdrvMailbox.data, buf, 4)) {
+    // Accept "0" as a wildcard: clears the filter so any meter is accepted.
+    // Useful for first-time setup / sniffing the actual ID off the air.
+    if (XdrvMailbox.data_len == 1 && XdrvMailbox.data[0] == '0') {
+      memset(buf, 0, sizeof(buf));
+    } else if (!M21ParseHex(XdrvMailbox.data, buf, 4)) {
       ResponseCmndError();
       return;
     }
