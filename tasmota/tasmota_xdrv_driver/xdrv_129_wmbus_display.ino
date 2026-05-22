@@ -73,6 +73,12 @@
 #ifndef WMBUS_OLED_DIM_TIMEOUT_SEC
 #define WMBUS_OLED_DIM_TIMEOUT_SEC 300
 #endif
+// Auto power-off after this many seconds of uptime to save power on
+// battery / always-on installations. 0 disables (panel stays on forever).
+// User can always re-enable with `OledOn` over MQTT/console.
+#ifndef WMBUS_OLED_AUTO_OFF_SEC
+#define WMBUS_OLED_AUTO_OFF_SEC    300
+#endif
 
 #define WMBUS_OLED_PAGE_COUNT      3
 
@@ -91,6 +97,7 @@ struct WMBusOledState {
   bool      power_on;
   uint16_t  sec_since_input;
   bool      dimmed;
+  bool      auto_off_done;             // true once the boot-time auto-off fired
 };
 
 static WMBusOledState *WOled = nullptr;
@@ -295,6 +302,22 @@ static void WMBusOledRender() {
 static void WMBusOledTick() {
   if (!WOled || !WOled->ready) { return; }
 
+  // Auto power-off N seconds after boot (suppressed when 0). Fires exactly
+  // once; subsequent `OledOn` re-enables the panel for good.
+#if WMBUS_OLED_AUTO_OFF_SEC > 0
+  if (!WOled->auto_off_done && WOled->power_on &&
+      (millis() / 1000) >= (uint32_t)WMBUS_OLED_AUTO_OFF_SEC) {
+    WOLED_LOG(LOG_LEVEL_INFO, "auto-off after %us uptime", (unsigned)WMBUS_OLED_AUTO_OFF_SEC);
+    WOled->oled.powerOff();
+    WOled->power_on      = false;
+    WOled->auto_off_done = true;
+  }
+#endif
+
+  // When powered off (manual OledOff or boot auto-off) skip page rotation,
+  // rendering and dim logic to save I²C traffic / CPU.
+  if (!WOled->power_on) { return; }
+
   // Force redraw on new valid frame
   M21DisplaySnapshot snap = {};
   if (M21GetDisplaySnapshot(&snap)) {
@@ -321,6 +344,54 @@ static void WMBusOledTick() {
       ++WOled->sec_since_redraw;
     }
   }
+
+  // Auto power-off N seconds after boot (suppressed when 0). Fires exactly
+  // once; subsequent `OledOn` re-enables the panel for good.
+#if WMBUS_OLED_AUTO_OFF_SEC > 0
+  if (!WOled->auto_off_done && WOled->power_on &&
+      (millis() / 1000) >= (uint32_t)WMBUS_OLED_AUTO_OFF_SEC) {
+    WOLED_LOG(LOG_LEVEL_INFO, "auto-off after %us uptime", (unsigned)WMBUS_OLED_AUTO_OFF_SEC);
+    WOled->oled.powerOff();
+    WOled->power_on      = false;
+    WOled->auto_off_done = true;
+  }
+#endif
+
+  // Auto power-off N seconds after boot (suppressed when 0). Fires exactly
+  // once; subsequent `OledOn` re-enables the panel for good.
+#if WMBUS_OLED_AUTO_OFF_SEC > 0
+  if (!WOled->auto_off_done && WOled->power_on &&
+      (millis() / 1000) >= (uint32_t)WMBUS_OLED_AUTO_OFF_SEC) {
+    WOLED_LOG(LOG_LEVEL_INFO, "auto-off after %us uptime", (unsigned)WMBUS_OLED_AUTO_OFF_SEC);
+    WOled->oled.powerOff();
+    WOled->power_on      = false;
+    WOled->auto_off_done = true;
+  }
+#endif
+
+  // Auto power-off N seconds after boot (suppressed when 0). Fires exactly
+  // once; subsequent `OledOn` re-enables the panel for good.
+#if WMBUS_OLED_AUTO_OFF_SEC > 0
+  if (!WOled->auto_off_done && WOled->power_on &&
+      (millis() / 1000) >= (uint32_t)WMBUS_OLED_AUTO_OFF_SEC) {
+    WOLED_LOG(LOG_LEVEL_INFO, "auto-off after %us uptime", (unsigned)WMBUS_OLED_AUTO_OFF_SEC);
+    WOled->oled.powerOff();
+    WOled->power_on      = false;
+    WOled->auto_off_done = true;
+  }
+#endif
+
+  // Auto power-off N seconds after boot (suppressed when 0). Fires exactly
+  // once; subsequent `OledOn` re-enables the panel for good.
+#if WMBUS_OLED_AUTO_OFF_SEC > 0
+  if (!WOled->auto_off_done && WOled->power_on &&
+      (millis() / 1000) >= (uint32_t)WMBUS_OLED_AUTO_OFF_SEC) {
+    WOLED_LOG(LOG_LEVEL_INFO, "auto-off after %us uptime", (unsigned)WMBUS_OLED_AUTO_OFF_SEC);
+    WOled->oled.powerOff();
+    WOled->power_on      = false;
+    WOled->auto_off_done = true;
+  }
+#endif
 
   // Optional dim after timeout (suppressed when 0)
 #if WMBUS_OLED_DIM_TIMEOUT_SEC > 0
@@ -379,6 +450,7 @@ void CmndOledOn(void) {
   WOled->power_on        = true;
   WOled->dimmed          = false;
   WOled->sec_since_input = 0;
+  WOled->auto_off_done   = true;        // user override, disarm boot auto-off
   ResponseCmndDone();
 }
 
