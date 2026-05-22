@@ -1,175 +1,361 @@
-![Tasmota logo](/tools/logo/TASMOTA_FullLogo_Vector.svg#gh-light-mode-only)![Tasmota logo](/tools/logo/TASMOTA_FullLogo_Vector_White.svg#gh-dark-mode-only)
+# Tasmota Fork – Multical21 / wM-Bus Empfänger
 
-Alternative firmware for [ESP8266](https://en.wikipedia.org/wiki/ESP8266) and [ESP32](https://en.wikipedia.org/wiki/ESP32) based devices with **easy configuration using webUI, OTA updates, automation using timers or rules, expandability and entirely local control over MQTT, HTTP, Serial or KNX**.
-_Written for PlatformIO._
+> Fork von [arendst/Tasmota](https://github.com/arendst/Tasmota) – Upstream‑Dokumentation, Release‑Notes und allgemeine Tasmota‑Features siehe [README_UPSTREAM.md](README_UPSTREAM.md) bzw. <https://tasmota.github.io/docs/>.
 
-[![GitHub version](https://img.shields.io/github/release/arendst/Tasmota.svg)](http://ota.tasmota.com/tasmota/release)
-[![GitHub download](https://img.shields.io/github/downloads/arendst/Tasmota/total.svg)](https://github.com/arendst/Tasmota/releases/latest)
-[![License](https://img.shields.io/github/license/arendst/Tasmota.svg)](LICENSE.txt)
-[![Discord](https://img.shields.io/discord/479389167382691863.svg?logo=discord&logoColor=white&color=5865F2&label=Discord)](https://discord.gg/Ks2Kzd4)
+Dieser Fork erweitert Tasmota um einen modularen **wireless M‑Bus (wM-Bus, OMS) Empfänger**
+für ESP32-Boards. Damit lassen sich z. B. Kamstrup **Multical21 / FlowIQ 2200** Wasserzähler
+direkt per Funk in Home Assistant, openHAB, ioBroker oder MQTT-Backends einbinden.
 
-<hr></hr>
+Implementiert sind drei kooperierende Tasmota-Treiber:
 
-**In light of current events we like to support the people behind _PlatformIO Project_, especially Ivan Kravets, and wish them the strength to help stop the war. See [platformio-is-ukrainian-project-please-help-us-stop-the-war](https://community.platformio.org/t/platformio-is-ukrainian-project-please-help-us-stop-the-war/26330) for what you can do.**
+| Slot | Datei | Zweck |
+|------|-------|-------|
+| `XDRV_128` | [xdrv_128_wmbus_radio.ino](tasmota/tasmota_xdrv_driver/xdrv_128_wmbus_radio.ino) | Radio-Frontend (SX1262, CC1101 geplant), Frame-Dispatcher |
+| `XDRV_129` | [xdrv_129_wmbus_display.ino](tasmota/tasmota_xdrv_driver/xdrv_129_wmbus_display.ino) | SSD1306 OLED HUD für Heltec V3 |
+| `XSNS_121` | [xsns_121_multical21.ino](tasmota/tasmota_xsns_sensor/xsns_121_multical21.ino) | Kamstrup‑Decoder (AES‑128‑CTR, Compact + Long Frame) |
 
-<hr></hr>
+---
 
-## Easy install
+## Inhalt
 
-Easy initial installation of Tasmota can be performed using the [Tasmota WebInstaller](https://tasmota.github.io/install/).
+- [Unterstützte Hardware](#unterstützte-hardware)
+- [Build & Flash](#build--flash)
+- [1. Heltec WiFi LoRa 32 V3 (SX1262)](#1-heltec-wifi-lora-32-v3-sx1262)
+- [2. ESP32 + CC1101 Funkmodul](#2-esp32--cc1101-funkmodul)
+- [3. Gemeinsame Konfiguration (alle Boards)](#3-gemeinsame-konfiguration-alle-boards)
+- [Backlog‑Snippets](#backlog-snippets)
+- [Debugging](#debugging)
+- [MQTT Output](#mqtt-output)
+- [Bekannte Einschränkungen](#bekannte-einschränkungen)
 
-If you like **Tasmota**, give it a star, or fork it and contribute!
+---
 
-[![GitHub stars](https://img.shields.io/github/stars/arendst/Tasmota.svg?style=social&label=Star)](https://github.com/arendst/Tasmota/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/arendst/Tasmota.svg?style=social&label=Fork)](https://github.com/arendst/Tasmota/network)
-[![donate](https://img.shields.io/badge/donate-PayPal-blue.svg)](https://paypal.me/tasmota)
+## Unterstützte Hardware
 
-See [RELEASENOTES.md](https://github.com/arendst/Tasmota/blob/master/RELEASENOTES.md) for release information.
+| Board / Modul | Funk-Chip | Status |
+|---|---|---|
+| Heltec WiFi LoRa 32 V3 (ESP32‑S3) | Semtech SX1262 (on‑board) | ✅ unterstützt (MVP) |
+| Heltec WiFi LoRa 32 V2 (ESP32) | Semtech SX1276 | ⚠️ nicht getestet (SX1276‑Backend folgt) |
+| beliebiges ESP32/ESP8266 + CC1101‑Modul | TI CC1101 | 🛠️ Pin‑Konfiguration vorbereitet, Backend in Arbeit |
 
-Firmware binaries can be downloaded from http://ota.tasmota.com/tasmota/release/ or http://ota.tasmota.com/tasmota32/release/ for ESP32 binaries.
+> **Hinweis CC1101:** Das CC1101‑Backend ist in [xdrv_128_wmbus_radio.ino](tasmota/tasmota_xdrv_driver/xdrv_128_wmbus_radio.ino) bereits als zweiter Pfad eingeplant. Bis zur Fertigstellung lässt sich CC1101 nur mit dem klassischen Treiber aus [MULTICAL21.md](MULTICAL21.md) (Legacy‑Pfad) betreiben.
 
-## Development
+---
 
-[![Dev Version](https://img.shields.io/badge/development%20version-v15.4.x.x-blue.svg)](https://github.com/arendst/Tasmota)
-[![Download Dev](https://img.shields.io/badge/download-development-yellow.svg)](http://ota.tasmota.com/tasmota/)
-[![Tasmota CI](https://github.com/arendst/Tasmota/actions/workflows/build_all_the_things.yml/badge.svg)](https://github.com/arendst/Tasmota/actions/workflows/build_all_the_things.yml)
-[![Build_development](https://github.com/arendst/Tasmota/actions/workflows/Tasmota_build_devel.yml/badge.svg)](https://github.com/arendst/Tasmota/actions/workflows/Tasmota_build_devel.yml)
+## Build & Flash
 
-See [CHANGELOG.md](CHANGELOG.md) for detailed change information.
+```pwsh
+git clone https://github.com/<dein-user>/MultiCal21_Tasmota_fork.git
+cd MultiCal21_Tasmota_fork
 
-Unless your Tasmota powered device exhibits a problem or lacks a feature that you need, leave your device alone - it works so don’t make unnecessary changes! If the release version (i.e., the master branch) exhibits unexpected behaviour for your device and configuration, you should upgrade to the latest development version instead to see if your problem is resolved as some bugs in previous releases or development builds may already have been resolved.
+# Bevorzugt VS Code + PlatformIO-Extension öffnen, dann Env wählen:
+#   tasmota32s3-heltec-wmbus
 
-Every commit made to the development branch, which is compiling successfully, will post new binary files at http://ota.tasmota.com/tasmota/ (this web address can be used for OTA updates too). It is important to note that these binaries are based on the current development codebase. These commits are tested as much as is possible and are typically quite stable. However, it is infeasible to test on the hundreds of different types of devices with all the available configuration options permitted.
+# Oder per CLI:
+pio run -e tasmota32s3-heltec-wmbus -t upload
+pio device monitor -e tasmota32s3-heltec-wmbus
+```
 
-Note that there is a chance, as with any upgrade, that the device may not function as expected. You must always account for the possibility that you may need to flash the device via the serial programming interface if the OTA upgrade fails. Even with the master release, you should always attempt to test the device or a similar prototype before upgrading a device which is in production or is hard to reach. And, as always, make a backup of the device configuration before beginning any firmware update.
+Build‑Env-Definition: [platformio_tasmota_env32.ini](platformio_tasmota_env32.ini#L413)
 
-## Disclaimer
+Aktive Build‑Flags:
 
-:warning: **DANGER OF ELECTROCUTION** :warning:
+```
+-DFIRMWARE_TASMOTA32
+-DUSE_WMBUS_RADIO       ; aktiviert xdrv_128 + Radio-Backend
+-DUSE_WMBUS_OLED        ; aktiviert xdrv_129 OLED HUD
+-DUSE_MULTICAL21        ; aktiviert xsns_121 Decoder
+```
 
-If your device connects to mains electricity (AC power) there is danger of electrocution if not installed properly. If you don't know how to install it, please call an electrician (***Beware:*** certain countries prohibit installation without a licensed electrician present). Remember: _**SAFETY FIRST**_. It is not worth the risk to yourself, your family and your home if you don't know exactly what you are doing. Never tinker or try to flash a device using the serial programming interface while it is connected to MAINS ELECTRICITY (AC power).
+Eigene Anpassungen gehören in [platformio_override.ini](platformio_override.ini) – `platformio_tasmota_env32.ini` bleibt unangetastet, damit Upstream‑Merges sauber laufen.
 
-We don't take any responsibility nor liability for using this software nor for the installation or any tips, advice, videos, etc. given by any member of this site or any related site.
+---
 
-## Note
+## 1. Heltec WiFi LoRa 32 V3 (SX1262)
 
-Please do not ask to add new devices unless it requires additional code for new features. If the device is not listed as a module, try using [Templates](https://tasmota.github.io/docs/Templates) first. If it is not listed in the [Tasmota Device Templates Repository](http://templates.blakadder.com) create your own [Template](https://tasmota.github.io/docs/Templates#creating-your-template).
+Das Heltec V3 hat **SX1262 + SSD1306 OLED + Vext‑Power** bereits on-board verdrahtet. Keine externe Verkabelung nötig.
 
-## Quick Install
-Download one of the released binaries from http://ota.tasmota.com/tasmota/release/ or http://ota.tasmota.com/tasmota32/release/ and flash it to your hardware [using our installation guide](https://tasmota.github.io/docs/Getting-Started).
+### Pinout (fest verdrahtet)
 
-## Important User Compilation Information
-If you want to compile Tasmota yourself keep in mind the following:
+| Funktion | GPIO | Tasmota Template-Eintrag |
+|---|---|---|
+| SPI SCK   | 9  | `SPI CLK`  |
+| SPI MISO  | 11 | `SPI MISO` |
+| SPI MOSI  | 10 | `SPI MOSI` |
+| LoRa CS   | 8  | `LoRa CS`  |
+| LoRa RST  | 12 | `LoRa RST` |
+| LoRa BUSY | 13 | `LoRa BUSY`|
+| LoRa DIO1 | 14 | `LoRa DI1` |
+| OLED SDA  | 17 | `I2C SDA`  |
+| OLED SCL  | 18 | `I2C SCL`  |
+| OLED RST  | 21 | (Auto‑Reset im Treiber, kein Template‑Eintrag nötig) |
+| Vext EN   | 36 | (vom Treiber direkt gesteuert) |
 
-- For ESP8285 based devices only Flash Mode **DOUT** is supported. Do not use Flash Mode DIO / QIO / QOUT as it might seem to brick your device.
-- For ESP8285 based devices Tasmota uses a 1M linker script WITHOUT spiffs **1M (no SPIFFS)** for optimal code space.
-- To make compile time changes to Tasmota use the `user_config_override.h` file. It assures keeping your custom settings when you download and compile a new version. You have to make a copy from the provided `user_config_override_sample.h` file and add your setting overrides.
+### Konfiguration nach dem Flashen
 
-## Configuration Information
+1. **Erstes Boot** → Hotspot `tasmota-xxxx` → WLAN konfigurieren.
+2. **Template setzen** (in der Web‑UI unter *Configuration → Configure Other → Template* einfügen):
 
-Please refer to the installation and configuration articles in our [documentation](https://tasmota.github.io/docs).
+```json
+{"NAME":"Heltec V3 wM-Bus","GPIO":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,608,640,0,0,0,5728,0,0,0,0,0,0,5792,5824,5856,5920,5888,0,0,0,0,0,0,0,5760,0,0,0,0,0],"FLAG":0,"BASE":1}
+```
 
-## Migration Information
+3. Modul aktivieren: *Configuration → Configure Module → Module type = User Configured*, **Save**.
+4. Sobald das Modul mit gesetztem Template läuft, erscheinen im Log Zeilen wie:
+   ```
+   WMBUS: SX1262 ready (868.95 MHz, 100 kbps)
+   WOLED: SSD1306 ready at 0x3C (Vext pin=36 RST pin=21)
+   ```
 
-See [migration path](https://tasmota.github.io/docs/Upgrading#migration-path) for instructions how to migrate to a major version.
+### Heltec‑spezifische Konsolen‑Befehle
 
-**Do not upgrade from minimal to minimal version. It will most likely fail at some point and will require flashing via serial.** If you do have to use minimal versions, always OTA to a full version of the same release before applying next minimal version.
+```
+; OLED komplett aus
+OledOff
 
-Pay attention to the following version breaks due to dynamic settings updates:
+; OLED wieder an (deaktiviert auch den Boot-Auto-Off)
+OledOn
 
-1. Migrate to **Sonoff-Tasmota 3.9.x**
-2. Migrate to **Sonoff-Tasmota 4.x**
-3. Migrate to **Sonoff-Tasmota 5.14**
-4. Migrate to **Sonoff-Tasmota 6.7.1** (http://ota.tasmota.com/tasmota/release_6.7.1/sonoff.bin) - NOTICE underscore as a dash is not supported in older versions
-5. Migrate to **Tasmota 7.2.0** (http://ota.tasmota.com/tasmota/release-7.2.0/tasmota.bin)
+; Helligkeit (0..255)
+OledDim 200
 
---- Major change in parameter storage layout ---
+; Seite fixieren (0=Network, 1=Water, 2=Debug, -1=Auto-Rotate)
+OledPage 1
+```
 
-6. Migrate to **Tasmota 8.5.1** (http://ota.tasmota.com/tasmota/release-8.5.1/tasmota.bin)
+> Default: Das OLED schaltet sich **5 Minuten nach Boot** automatisch ab (Stromspar‑Auto‑Off). Override per Build‑Flag `-DWMBUS_OLED_AUTO_OFF_SEC=<sek>` in [platformio_override.ini](platformio_override.ini); `0` = nie.
 
---- Major change in internal GPIO function representation ---
+---
 
-7. Migrate to **Tasmota 9.1** (http://ota.tasmota.com/tasmota/release-9.1.0/tasmota.bin.gz)
-8. Upgrade to **latest release** (http://ota.tasmota.com/tasmota/release/tasmota.bin.gz)
+## 2. ESP32 + CC1101 Funkmodul
 
-While fallback or downgrading is common practice it was never supported due to Settings additions or changes in newer releases. Starting with release **v9.1.0 Imogen** the internal GPIO function representation has changed in such a way that fallback is only possible to the latest GPIO configuration before installing **v9.1.0**.
+Empfohlen für Setups **ohne LoRa‑Onboard‑Chip**, z. B. Wemos D1 Mini, ESP32‑C3 SuperMini, NodeMCU.
 
-## Support Information
+> **Status:** Im neuen `xdrv_128`-Stack ist das CC1101‑Backend vorbereitet, aber noch nicht aktiv. Bis dahin: Hardware bereits jetzt verdrahten und mit dem klassischen Pfad aus [MULTICAL21.md](MULTICAL21.md) betreiben.
 
-<img src="https://user-images.githubusercontent.com/5904370/68332933-e6e5a600-00d7-11ea-885d-50395f7239a1.png" width=150 align="right" />
+### Beispiel‑Verdrahtung (ESP32‑C3 SuperMini)
 
-For a database of supported devices see [Tasmota Device Templates Repository](https://templates.blakadder.com)
+| CC1101 Pin | Funktion | ESP32‑C3 GPIO | Tasmota‑Template |
+|---|---|---|---|
+| VCC  | 3.3 V    | 3V3 | – |
+| GND  | GND      | GND | – |
+| SCK  | SPI CLK  | GPIO 4 | `SPI CLK` |
+| MISO | SPI MISO | GPIO 5 | `SPI MISO` |
+| MOSI | SPI MOSI | GPIO 6 | `SPI MOSI` |
+| CSN  | SPI CS   | GPIO 7 | `CC1101 CS` |
+| GDO0 | IRQ      | GPIO 8 | `CC1101 GDO0` |
+| GDO2 | (optional) | – | – |
 
-If you're looking for support on **Tasmota** there are some options available:
+ANT‑Pin am CC1101: 17.4 cm Draht (λ/4 für 868 MHz) oder eine 868 MHz SMA‑Antenne.
 
-### Documentation
+### Build‑Flag
 
-* [Documentation Site](https://tasmota.github.io/docs): For information on how to flash Tasmota, configure, use and expand it
-* [FAQ and Troubleshooting](https://tasmota.github.io/docs/FAQ/): For information on common problems and solutions.
-* [Commands Information](https://tasmota.github.io/docs/Commands): For information on all the commands supported by Tasmota.
+In [platformio_override.ini](platformio_override.ini) ein eigenes Env anlegen, Beispiel:
 
-### Support's Community
+```ini
+[env:tasmota32c3-cc1101-wmbus]
+extends     = env:tasmota32c3
+build_flags = ${env:tasmota32c3.build_flags}
+              -DUSE_WMBUS_RADIO
+              -DUSE_MULTICAL21
+              ; -DUSE_WMBUS_OLED   ; (nur falls SSD1306 vorhanden)
+```
 
-* [Tasmota Discussions](https://github.com/arendst/Tasmota/discussions): For Tasmota usage questions, Feature Requests and Projects.
-* [Tasmota Users Chat](https://discord.gg/Ks2Kzd4): For support, troubleshooting and general questions. You have better chances to get fast answers from members of the Tasmota Community.
-* [Search in Issues](https://github.com/arendst/Tasmota/issues): You might find an answer to your question by searching current or closed issues.
-* [Software Problem Report](https://github.com/arendst/Tasmota/issues/new?template=Bug_report.md): For reporting problems of Tasmota Software.
+### CC1101 vs. SX1262
 
-### Unofficial Community Resources
-* [Tasmota-DE](https://t.me/TasmotaDE): A German-language Telegram group related to Tasmota.
+Der Decoder (`xsns_121`) und alle `M21*`‑Befehle sind **funkchip‑agnostisch**. Sobald das passende Backend instanziert ist, gelten exakt dieselben Backlogs wie unter Heltec.
 
-## Contribute
+---
 
-You can contribute to Tasmota by
-- Providing Pull Requests (Features, Proof of Concepts, Language files or Fixes)
-- Testing new released features and report issues
-- Donating to acquire hardware for testing and implementing or out of gratitude
-- Contributing missing [documentation](https://tasmota.github.io/docs) for features and devices
+## 3. Gemeinsame Konfiguration (alle Boards)
 
-[![donate](https://img.shields.io/badge/donate-PayPal-blue.svg)](https://paypal.me/tasmota)
+Nach Template + Reboot ist nur noch der **AES‑Schlüssel** und die **Meter‑ID** nötig. Beides bekommt man bei Kamstrup‑Multical21 üblicherweise vom Wasserversorger; die ID steht **lesbar** auf dem Display des Zählers (8‑stellige Dezimalzahl).
 
-## Credits
+### Erstinbetriebnahme per Backlog
 
-People helping to keep the show on the road:
-- Sfromis providing extensive user support
-- Barbudor providing user support and code fixes and additions
-- David Lang providing initial issue resolution and code optimizations
-- Heiko Krupp for his IRSend, HTU21, SI70xx and Wemo/Hue emulation drivers
-- Wiktor Schmidt for Travis CI implementation
-- Thom Dietrich for PlatformIO optimizations
-- Marinus van den Broek for his EspEasy groundwork
-- Pete Ba for more user friendly energy monitor calibration
-- Lobradov providing compile optimization tips
-- Flexiti for his initial timer implementation
-- reloxx13 for his [TasmoAdmin](https://github.com/reloxx13/TasmoAdmin) management tool
-- Joachim Banzhaf for his TSL2561 library and driver
-- Andre Thomas for providing many drivers
-- Gijs Noorlander for his MHZ19, SenseAir and updated PubSubClient drivers
-- Erik Montnemery for his HomeAssistant Discovery concept and many code tuning tips
-- Federico Leoni for continued HomeAssistant Discovery support
-- Aidan Mountford for his HSB support
-- Daniel Ztolnai for his Serial Bridge implementation
-- Gerhard Mutz for multiple sensor & display drivers, Sunrise/Sunset, and scripting
-- Nuno Ferreira for his HC-SR04 driver
-- Adrian Scillato for his (security)fixes and implementing and maintaining KNX
-- Gennaro Tortone for implementing and maintaining Eastron drivers
-- Raymond Mouthaan for managing Wemos Wiki information
-- Norbert Richter for his [decode-config.py](https://github.com/tasmota/decode-config) tool
-- Joel Stein, digiblur and Shantur Rathore for their Tuya research and driver
-- Frogmore42 for providing many issue answers
-- Jason2866 for platformio support and providing many issue answers
-- Blakadder for managing the document site and providing template management
-- Stephan Hadinger for refactoring light driver, enhancing HueEmulation, LVGL, Zigbee and Berry support
-- tmo for designing the official Tasmota logo
-- Stefan Bode for his Shutter and Deep sleep drivers
-- Jacek Ziółkowski for his [TDM](https://github.com/jziolkowski/tdm) management tool and [Tasmotizer](https://github.com/tasmota/tasmotizer) flashing tool
-- Christian Staars for NRF24L01 and HM-10 Bluetooth sensor support
-- Paul Diem for UDP Group communication support
-- Jörg Schüler-Maroldt for his initial ESP32 port
-- Javier Arigita for his thermostat driver
-- Simon Hailes for ESP32 Bluetooth extensions
-- Many more providing Tips, Wips, Pocs, PRs and Donations
+```text
+Backlog M21Id 0; M21Key 00112233445566778899AABBCCDDEEFF; M21Type 0; M21Period 60; SetOption4 1; TelePeriod 300
+```
 
-## License
+- `M21Id 0` → **Promiscuous Mode**: alle Multical21‑Telegramme im Funkbereich werden angenommen → die echte ID erscheint im Log unter `M21: RX mfr=KAM id=XXXXXXXX`.
+- Sobald die eigene ID bekannt ist, festschreiben:
 
-This program is licensed under GPL-3.0-only
+```text
+Backlog M21Id 75714832; SaveData 1
+```
+
+### Alle M21‑Befehle
+
+| Befehl | Werte | Wirkung |
+|---|---|---|
+| `M21Key <32-hex>`     | 16 Byte AES‑Key als Hex‑String                       | AES‑128‑CTR Decryption Key setzen. Antwort maskiert (`set`/`missing`). |
+| `M21Id <8-hex>`       | 8 Hex‑Zeichen (=4 Byte LE Meter‑ID) **oder** `0`    | `0` = Wildcard (alles annehmen). |
+| `M21Type <0\|1>`      | `0` = Multical21, `1` = FlowIQ 2200                 | Steuert Decoder‑Varianten. |
+| `M21Period <s>`       | `0…3600`                                            | Mindestabstand zwischen MQTT‑Publishes; `0` = jeder Frame. |
+| `M21Info`             | –                                                   | JSON‑Status: HW, Konfig, Frame‑Counter, RSSI. |
+
+### Allgemeine Tasmota‑Befehle, die wir empfehlen
+
+```text
+Backlog Topic W101; FullTopic %prefix%/%topic%/; TelePeriod 300; SetOption4 1; SetOption65 1; Hostname multical21-%06X; Restart 1
+```
+
+- `Topic W101` setzt den MQTT‑Topic auf etwas Sprechendes (z. B. „Wasserzähler 101“).
+- `SetOption4 1` → MQTT‑Topics in Klein‑/Großbuchstabentrennung sauber.
+- `SetOption65 1` → schnellere WiFi‑Reconnects.
+- `TelePeriod 300` → reguläres `tele/W101/SENSOR` alle 5 min. Bei jedem **decodierten Multical‑Frame** (~16 s) wird zusätzlich sofort ein SENSOR‑Telegramm gepostet (per `MqttPublishTeleSensor()` im Decoder).
+
+---
+
+## Backlog‑Snippets
+
+### A) Vollständige Erstinstallation (Heltec V3)
+
+```text
+Backlog Hostname multical21-%06X; Topic W101; FullTopic %prefix%/%topic%/; MqttHost 192.168.1.10; MqttPort 1883; MqttUser tasmota; MqttPassword secret; TelePeriod 300; SetOption4 1; SetOption65 1; Restart 1
+```
+
+Nach dem Reboot:
+
+```text
+Backlog M21Id 0; M21Key 00112233445566778899AABBCCDDEEFF; M21Type 0; M21Period 60; M21Info
+```
+
+Sobald die eigene ID im Log auftaucht (`M21: RX mfr=KAM id=XXXXXXXX`):
+
+```text
+Backlog M21Id XXXXXXXX; SaveData 1; M21Info
+```
+
+### B) Display ständig an / nie ausschalten
+
+```text
+Backlog OledOn; OledDim 200
+```
+
+> Persistent über Builds: `-DWMBUS_OLED_AUTO_OFF_SEC=0` in [platformio_override.ini](platformio_override.ini).
+
+### C) Reset & Defaults
+
+```text
+Backlog Reset 5; Restart 1     ; löscht alle Settings, behält WLAN
+Backlog Reset 1; Restart 1     ; Werksreset (auch WLAN weg)
+```
+
+### D) Diagnose‑Dump (einmaliger Statusabruf)
+
+```text
+Backlog M21Info; Status 0; Status 5; Status 11; State
+```
+
+---
+
+## Debugging
+
+### Live‑Log per serieller Konsole
+
+```pwsh
+pio device monitor -e tasmota32s3-heltec-wmbus
+```
+
+Wahlweise auch über die Tasmota Web‑UI unter *Consoles → Console* (Auto‑Refresh).
+
+### Log‑Level setzen
+
+```text
+SerialLog 4       ; Detaillevel für UART (0..4)
+WebLog 4          ; Detaillevel für Web-Konsole
+MqttLog 0         ; Log nach MQTT (0=off, 4=DEBUG)
+TelePeriod 30     ; SENSOR-Daten alle 30 s (zum Testen)
+```
+
+> Loglevel 4 (DEBUG) aktiviert die wichtigen Hex‑Dumps:
+> - `M21: RX  mfr=KAM id=...  len=... rssi=...`
+> - `M21: RAW <hex>` – rohe Frame‑Bytes nach Sync‑Strip
+> - `M21: HDR <hex>` – wM-Bus‑Header
+> - `M21: DEC <hex>` – entschlüsselter Plaintext
+> - `M21: CRC ok len=64 CI=79` / `CRC mismatch ... (continuing)`
+> - `WMBUS: SX1262 ready (868.95 MHz, 100 kbps)`
+> - `WOLED: SSD1306 ready at 0x3C ...`
+
+### Status abrufen
+
+```text
+M21Info       ; JSON: {"M21Info":{"Hw":"ok","Configured":"ok","Id":"75714832","Type":0,"Period":60,"Frames":42,"Valid":40,"Rssi":-72}}
+Status 11     ; allgemeiner Tasmota State + Sensorblock
+```
+
+### Live MQTT‑Trace mitschneiden
+
+```pwsh
+mosquitto_sub -h <broker> -v -t 'tele/W101/#' -t 'stat/W101/#'
+```
+
+### Häufige Probleme
+
+| Symptom | Diagnose | Lösung |
+|---|---|---|
+| `Frames`>0, `Valid`=0 | AES‑Key falsch oder Meter‑ID‑Filter aktiv | `M21Key …` neu setzen, `M21Id 0` zum Sniffen |
+| Immer dieselbe falsche Hersteller‑ID | Sync/L‑Field nicht gestrippt | Aktuellen Stand ziehen – Fix in [radio_sx1262.cpp](lib/lib_rf/wmbus/src/radio_sx1262.cpp) |
+| OLED bleibt schwarz | RST‑Pulse fehlt | sicherstellen, dass `WMBUS_OLED_RST_PIN=21` nicht überschrieben ist |
+| OLED geht nach 5 min aus | Auto‑Off aktiv (gewollt) | `OledOn` oder `-DWMBUS_OLED_AUTO_OFF_SEC=0` |
+| Keine Frames empfangen | Antenne, Distanz, Wandstärke | mit `M21Id 0` testen, RSSI im Log prüfen |
+| `M21: CRC mismatch … (continuing)` | erwartetes Verhalten bei Compact‑Frames | nur Warnung – Werte sind gültig |
+
+---
+
+## MQTT Output
+
+Beispiel `tele/W101/SENSOR` direkt nach einem decodierten Frame:
+
+```json
+{
+  "Time": "2026-05-22T18:42:11",
+  "Multical21": {
+    "Id": "75714832",
+    "Manufacturer": "KAM",
+    "Volume":       {"Value": 2587.221, "Unit": "m3"},
+    "VolumeTarget": {"Value": 2564.163, "Unit": "m3"},
+    "Frames": 42,
+    "Valid":  40,
+    "Rssi":  -72
+  }
+}
+```
+
+Home‑Assistant‑Snippet (MQTT‑Sensor):
+
+```yaml
+mqtt:
+  sensor:
+    - name: "Wasserzähler Gesamt"
+      state_topic: "tele/W101/SENSOR"
+      unit_of_measurement: "m³"
+      device_class: water
+      state_class: total_increasing
+      value_template: "{{ value_json.Multical21.Volume.Value }}"
+    - name: "Wasserzähler Stichtag"
+      state_topic: "tele/W101/SENSOR"
+      unit_of_measurement: "m³"
+      value_template: "{{ value_json.Multical21.VolumeTarget.Value }}"
+    - name: "Wasserzähler RSSI"
+      state_topic: "tele/W101/SENSOR"
+      unit_of_measurement: "dBm"
+      value_template: "{{ value_json.Multical21.Rssi }}"
+```
+
+---
+
+## Bekannte Einschränkungen
+
+- **Nur Mode C1** (868.95 MHz, 100 kbps). T1 / S1 sind nicht implementiert.
+- **CC1101‑Backend** ist in `xdrv_128` vorbereitet, aber noch nicht aktiv.
+- **Compact‑Frame‑CRC** wird im `xsns_121` als Warnung degradiert (`continuing`) – die EN13757‑CRC umspannt nicht das `0x2F`‑Padding.
+- Temperaturen werden nur in Long‑Frames (~täglich) gesendet; in Compact‑Frames bleibt `Flow.Temperature` / `Ambient.Temperature` bei `0`.
+- Settings (AES‑Key, Meter‑ID) liegen im Tasmota‑Settings‑Block; nach `Reset 5/6` müssen sie neu gesetzt werden.
+
+---
+
+## Lizenz & Mitwirken
+
+Dieser Fork bleibt unter der originalen Tasmota‑Lizenz (GPLv3). Eigene Treiber‑Dateien stehen unter **Apache‑2.0** (siehe Kopf der jeweiligen `.ino`). Pull Requests willkommen – bitte vorher gegen `tasmota32s3-heltec-wmbus` bauen und ein `M21Info`‑Log beilegen.
