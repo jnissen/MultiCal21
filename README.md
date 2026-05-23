@@ -22,11 +22,12 @@ Implementiert sind drei kooperierende Tasmota-Treiber:
 - [Build & Flash](#build--flash)
 - [1. Heltec WiFi LoRa 32 V3 (SX1262)](#1-heltec-wifi-lora-32-v3-sx1262)
 - [2. ESP32 + CC1101 Funkmodul](#2-esp32--cc1101-funkmodul)
-- [3. Gemeinsame Konfiguration (alle Boards)](#3-gemeinsame-konfiguration-alle-boards)
-- [Backlog‑Snippets](#backlog-snippets)
-- [Debugging](#debugging)
+- [3. Multical21‑Konfiguration](#3-multical21-konfiguration)
+- [Multical21‑Debugging](#multical21-debugging)
 - [MQTT Output](#mqtt-output)
 - [Bekannte Einschränkungen](#bekannte-einschränkungen)
+
+> Allgemeine Tasmota-Themen (WLAN-Setup, MQTT-Broker, Topic/Hostname, `SetOption*`, `Reset`, Web-UI-Bedienung, Log-Level …) sind **nicht** Teil dieses Dokuments. Dafür gilt die Upstream‑Doku: <https://tasmota.github.io/docs/>.
 
 ---
 
@@ -218,24 +219,24 @@ Der Decoder (`xsns_121`) und alle `M21*`‑Befehle sind **funkchip‑agnostisch*
 
 ---
 
-## 3. Gemeinsame Konfiguration (alle Boards)
+## 3. Multical21‑Konfiguration
 
-Nach Template + Reboot ist nur noch der **AES‑Schlüssel** und die **Meter‑ID** nötig. Beides bekommt man bei Kamstrup‑Multical21 üblicherweise vom Wasserversorger; die ID steht **lesbar** auf dem Display des Zählers (8‑stellige Dezimalzahl).
+Nach Template + Reboot sind nur noch **zwei Werte** Multical-spezifisch zu setzen: der **AES‑Schlüssel** und die **Meter‑ID** (8‑stellige Dezimalzahl auf dem Zifferblatt). Beides liefert der Wasserversorger.
 
-### Erstinbetriebnahme per Backlog
+### Erstinbetriebnahme per Backlog (Sniff‑Modus)
 
 ```text
-Backlog M21Id 0; M21Key 00112233445566778899AABBCCDDEEFF; M21Type 0; M21Period 60; SetOption4 1; TelePeriod 300
+Backlog M21Id 0; M21Key 00112233445566778899AABBCCDDEEFF; M21Type 0; M21Period 60
 ```
 
-- `M21Id 0` → **Promiscuous Mode**: alle Multical21‑Telegramme im Funkbereich werden angenommen → die echte ID erscheint im Log unter `M21: RX mfr=KAM id=XXXXXXXX`.
+- `M21Id 0` → **Promiscuous Mode**: alle Multical21‑Telegramme im Funkbereich werden akzeptiert → die echte ID erscheint im Log unter `M21: RX mfr=KAM id=XXXXXXXX`.
 - Sobald die eigene ID bekannt ist, festschreiben:
 
 ```text
 Backlog M21Id 75714832; SaveData 1
 ```
 
-### Alle M21‑Befehle
+### M21‑Befehlsreferenz
 
 | Befehl | Werte | Wirkung |
 |---|---|---|
@@ -245,101 +246,38 @@ Backlog M21Id 75714832; SaveData 1
 | `M21Period <s>`       | `0…3600`                                            | Mindestabstand zwischen MQTT‑Publishes; `0` = jeder Frame. |
 | `M21Info`             | –                                                   | JSON‑Status: HW, Konfig, Frame‑Counter, RSSI. |
 
-### Allgemeine Tasmota‑Befehle, die wir empfehlen
+> Bei jedem **decodierten Multical‑Frame** (~16 s) postet der Decoder zusätzlich sofort ein `SENSOR`‑Telegramm – unabhängig von `TelePeriod`.
+
+### OLED-Display (nur Heltec V3 / `USE_WMBUS_OLED`)
 
 ```text
-Backlog Topic W101; FullTopic %prefix%/%topic%/; TelePeriod 300; SetOption4 1; SetOption65 1; Hostname multical21-%06X; Restart 1
+OledOn               ; Display ein, Auto-Off deaktiviert
+OledOff              ; Display aus
+OledDim 200          ; Helligkeit (0..255)
+OledPage 1           ; Seite fixieren (0=Network, 1=Water, 2=Debug, -1=Auto)
 ```
 
-- `Topic W101` setzt den MQTT‑Topic auf etwas Sprechendes (z. B. „Wasserzähler 101“).
-- `SetOption4 1` → MQTT‑Topics in Klein‑/Großbuchstabentrennung sauber.
-- `SetOption65 1` → schnellere WiFi‑Reconnects.
-- `TelePeriod 300` → reguläres `tele/W101/SENSOR` alle 5 min. Bei jedem **decodierten Multical‑Frame** (~16 s) wird zusätzlich sofort ein SENSOR‑Telegramm gepostet (per `MqttPublishTeleSensor()` im Decoder).
+> Default-Verhalten: OLED schaltet sich **5 min nach Boot** ab. Persistent ändern per Build‑Flag `-DWMBUS_OLED_AUTO_OFF_SEC=<sek>` in [platformio_override.ini](platformio_override.ini); `0` = nie.
 
 ---
 
-## Backlog‑Snippets
+## Multical21‑Debugging
 
-### A) Vollständige Erstinstallation (Heltec V3)
-
-```text
-Backlog Hostname multical21-%06X; Topic W101; FullTopic %prefix%/%topic%/; MqttHost 192.168.1.10; MqttPort 1883; MqttUser tasmota; MqttPassword secret; TelePeriod 300; SetOption4 1; SetOption65 1; Restart 1
-```
-
-Nach dem Reboot:
-
-```text
-Backlog M21Id 0; M21Key 00112233445566778899AABBCCDDEEFF; M21Type 0; M21Period 60; M21Info
-```
-
-Sobald die eigene ID im Log auftaucht (`M21: RX mfr=KAM id=XXXXXXXX`):
-
-```text
-Backlog M21Id XXXXXXXX; SaveData 1; M21Info
-```
-
-### B) Display ständig an / nie ausschalten
-
-```text
-Backlog OledOn; OledDim 200
-```
-
-> Persistent über Builds: `-DWMBUS_OLED_AUTO_OFF_SEC=0` in [platformio_override.ini](platformio_override.ini).
-
-### C) Reset & Defaults
-
-```text
-Backlog Reset 5; Restart 1     ; löscht alle Settings, behält WLAN
-Backlog Reset 1; Restart 1     ; Werksreset (auch WLAN weg)
-```
-
-### D) Diagnose‑Dump (einmaliger Statusabruf)
-
-```text
-Backlog M21Info; Status 0; Status 5; Status 11; State
-```
-
----
-
-## Debugging
-
-### Live‑Log per serieller Konsole
-
-```pwsh
-pio device monitor -e tasmota32s3-heltec-wmbus
-```
-
-Wahlweise auch über die Tasmota Web‑UI unter *Consoles → Console* (Auto‑Refresh).
-
-### Log‑Level setzen
-
-```text
-SerialLog 4       ; Detaillevel für UART (0..4)
-WebLog 4          ; Detaillevel für Web-Konsole
-MqttLog 0         ; Log nach MQTT (0=off, 4=DEBUG)
-TelePeriod 30     ; SENSOR-Daten alle 30 s (zum Testen)
-```
-
-> Loglevel 4 (DEBUG) aktiviert die wichtigen Hex‑Dumps:
-> - `M21: RX  mfr=KAM id=...  len=... rssi=...`
+> Allgemeine Log-Bedienung (`SerialLog`, `WebLog`, `MqttLog`, Web-Konsole) ist Standard-Tasmota – siehe Upstream-Doku.
+> Auf **Loglevel 4 (DEBUG)** erzeugt der wM-Bus-Stack folgende Multical-spezifischen Zeilen:
+>
+> - `WMBUS: SX1262 ready (868.95 MHz, 100 kbps)`
+> - `WOLED: SSD1306 ready at 0x3C ...`
+> - `M21: RX  mfr=KAM id=... len=... rssi=...`
 > - `M21: RAW <hex>` – rohe Frame‑Bytes nach Sync‑Strip
 > - `M21: HDR <hex>` – wM-Bus‑Header
 > - `M21: DEC <hex>` – entschlüsselter Plaintext
 > - `M21: CRC ok len=64 CI=79` / `CRC mismatch ... (continuing)`
-> - `WMBUS: SX1262 ready (868.95 MHz, 100 kbps)`
-> - `WOLED: SSD1306 ready at 0x3C ...`
 
 ### Status abrufen
 
 ```text
 M21Info       ; JSON: {"M21Info":{"Hw":"ok","Configured":"ok","Id":"75714832","Type":0,"Period":60,"Frames":42,"Valid":40,"Rssi":-72}}
-Status 11     ; allgemeiner Tasmota State + Sensorblock
-```
-
-### Live MQTT‑Trace mitschneiden
-
-```pwsh
-mosquitto_sub -h <broker> -v -t 'tele/W101/#' -t 'stat/W101/#'
 ```
 
 ### Häufige Probleme
@@ -357,11 +295,10 @@ mosquitto_sub -h <broker> -v -t 'tele/W101/#' -t 'stat/W101/#'
 
 ## MQTT Output
 
-Beispiel `tele/W101/SENSOR` direkt nach einem decodierten Frame:
+`Multical21`-JSON‑Block, der vom Decoder im normalen Tasmota `tele/.../SENSOR`-Telegramm geliefert wird (MQTT-Topic / Sample-Rate werden über die Standard-Tasmota-Befehle gesteuert):
 
 ```json
 {
-  "Time": "2026-05-22T18:42:11",
   "Multical21": {
     "Id": "75714832",
     "Manufacturer": "KAM",
@@ -374,26 +311,17 @@ Beispiel `tele/W101/SENSOR` direkt nach einem decodierten Frame:
 }
 ```
 
-Home‑Assistant‑Snippet (MQTT‑Sensor):
+Felder im `Multical21`-Block:
 
-```yaml
-mqtt:
-  sensor:
-    - name: "Wasserzähler Gesamt"
-      state_topic: "tele/W101/SENSOR"
-      unit_of_measurement: "m³"
-      device_class: water
-      state_class: total_increasing
-      value_template: "{{ value_json.Multical21.Volume.Value }}"
-    - name: "Wasserzähler Stichtag"
-      state_topic: "tele/W101/SENSOR"
-      unit_of_measurement: "m³"
-      value_template: "{{ value_json.Multical21.VolumeTarget.Value }}"
-    - name: "Wasserzähler RSSI"
-      state_topic: "tele/W101/SENSOR"
-      unit_of_measurement: "dBm"
-      value_template: "{{ value_json.Multical21.Rssi }}"
-```
+| Feld | Bedeutung |
+|---|---|
+| `Id` | Meter‑ID (8 Hex / dezimal lesbar am Zähler) |
+| `Manufacturer` | wM‑Bus Hersteller‑Code (`KAM` = Kamstrup) |
+| `Volume.Value` | aktueller Zählerstand in m³ |
+| `VolumeTarget.Value` | Stichtagswert (nur Long‑Frame, ca. 1×/Tag) |
+| `Flow.Temperature`, `Ambient.Temperature` | Wasser-/Umgebungstemperatur (Long‑Frame) |
+| `Frames` / `Valid` | empfangene vs. erfolgreich decodierte Frames |
+| `Rssi` | Empfangspegel des letzten Frames in dBm |
 
 ---
 
