@@ -511,8 +511,6 @@ static void M21ParsePlain(const uint8_t *data, size_t len) {
   } else {
     return;
   }
-  AddLog(LOG_LEVEL_DEBUG, PSTR("M21: parse CI=%02X compact=%d have_temp=%d"),
-         data[2], (data[2] == 0x79) ? 1 : 0, M21->have_temp ? 1 : 0);
 
   if ((size_t)(pos_tt + 4) > len) { return; }
 
@@ -788,9 +786,12 @@ static void M21OnExternalFrame(const uint8_t *payload, size_t len, int16_t rssi_
            mfr,
            payload[6], payload[5], payload[4], payload[3],
            (unsigned)len, (int)rssi_dbm);
+#ifdef M21_DEBUG_RAW
     // Raw hex dump of the first 16 bytes so the actual frame layout can be
     // inspected with `Weblog 4` — the radio backend may or may not strip the
     // L-field depending on the chip's variable-length mode.
+    // Build only when explicitly compiled with -DM21_DEBUG_RAW to avoid the
+    // per-frame stack buffer + format overhead in normal operation.
     char hex[16 * 3 + 1];
     static const char nib[] = "0123456789ABCDEF";
     size_t n = (len < 16) ? len : 16;
@@ -801,6 +802,7 @@ static void M21OnExternalFrame(const uint8_t *payload, size_t len, int16_t rssi_
     }
     hex[3 * n] = 0;
     AddLog(LOG_LEVEL_DEBUG, PSTR("M21: RAW %s"), hex);
+#endif  // M21_DEBUG_RAW
   }
   if (M21->configured) {
     M21HandleFrame((uint8_t)len, payload);
